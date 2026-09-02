@@ -69,33 +69,58 @@
 .ha-screen{
   position: absolute;
   inset: 0;
-  display: none;
+  display: flex;
   flex-direction: column;
   background: var(--gray-50);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(2%);
+  transition: opacity .2s ease, transform .2s ease, visibility 0s linear .2s;
 }
-.ha-screen.active{ display: flex; }
+.ha-screen.active{
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0);
+  transition: opacity .2s ease, transform .2s ease;
+  z-index: 1;
+}
 .ha-overlay{
   position: absolute;
   inset: 0;
-  display: none;
+  display: flex;
   flex-direction: column;
   background: var(--gray-50);
   z-index: 20;
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition: opacity .22s ease, transform .22s ease;
 }
-.ha-overlay:not([hidden]){ display: flex; }
+.ha-overlay[hidden]{
+  display: flex;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(4%);
+}
 
 .ha-topbar{
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 44px 16px 12px;
-  background: var(--blue);
+  padding: 44px 16px 14px;
+  background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
   color: #fff;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 6px 16px -6px rgba(29,79,184,.45);
 }
 .ha-topbar-texts{ display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 auto; }
-.ha-topbar-title{ font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ha-topbar-sub{ font-size: 11.5px; color: rgba(255,255,255,.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ha-topbar-title{ font-size: 17px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ha-topbar-sub{ font-size: 11.5px; color: rgba(255,255,255,.82); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ha-back-btn, .ha-refresh-btn{
   flex: 0 0 auto;
   width: 30px; height: 30px;
@@ -105,17 +130,20 @@
   color: #fff;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
+  transition: background .15s ease, transform .12s ease;
 }
 .ha-back-btn:hover, .ha-refresh-btn:hover{ background: rgba(255,255,255,.28); }
+.ha-back-btn:active{ transform: scale(0.88); background: rgba(255,255,255,.32); }
 /* Kurzer Dreh-Effekt beim Klick, damit spürbar ist, dass wirklich neu
    geladen wird (die Seite selbst lädt direkt danach neu, siehe handyapp.js). */
-.ha-refresh-btn:active{ transform: rotate(180deg); transition: transform .3s ease; }
+.ha-refresh-btn:active{ transform: scale(0.88) rotate(180deg); transition: transform .3s ease; background: rgba(255,255,255,.32); }
 
 .ha-body-scroll{
   flex: 1 1 auto;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 12px 14px 24px;
+  scroll-behavior: smooth;
 }
 
 .ha-search-wrap{
@@ -126,9 +154,15 @@
   gap: 8px;
   background: #fff;
   border: 1px solid var(--gray-200);
-  border-radius: 10px;
-  padding: 9px 12px;
+  border-radius: 14px;
+  padding: 10px 14px;
   color: var(--gray-500);
+  box-shadow: 0 1px 2px rgba(20,22,28,.04);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ha-search-wrap:focus-within{
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-light);
 }
 .ha-search-wrap input{
   border: none;
@@ -145,7 +179,9 @@
   gap: 6px;
   overflow-x: auto;
   padding: 10px 14px 0;
+  scrollbar-width: none;
 }
+.ha-chip-row::-webkit-scrollbar{ display: none; }
 .ha-chip{
   flex: 0 0 auto;
   font-size: 11.5px;
@@ -154,25 +190,29 @@
   background: var(--gray-100);
   border: 1px solid var(--gray-200);
   border-radius: 20px;
-  padding: 5px 12px;
+  padding: 6px 13px;
   cursor: pointer;
   white-space: nowrap;
+  transition: background .15s ease, color .15s ease, transform .1s ease, box-shadow .15s ease;
 }
-.ha-chip.active{ background: var(--blue); border-color: var(--blue); color: #fff; }
+.ha-chip:active{ transform: scale(0.94); }
+.ha-chip.active{ background: var(--blue); border-color: var(--blue); color: #fff; box-shadow: 0 3px 10px -2px rgba(47,111,237,.5); }
 
 /* ---- Lists (Projekte, Masttafel) ---- */
-.ha-list{ display: flex; flex-direction: column; gap: 8px; }
+.ha-list{ display: flex; flex-direction: column; gap: 10px; }
 .ha-list-row{
   display: flex;
   align-items: center;
   gap: 10px;
   background: #fff;
-  border: 1px solid var(--gray-200);
-  border-radius: 12px;
-  padding: 12px 14px;
+  border: 1px solid var(--gray-100);
+  border-radius: 14px;
+  padding: 13px 14px;
   cursor: pointer;
+  box-shadow: 0 1px 2px rgba(20,22,28,.04), 0 1px 8px rgba(20,22,28,.03);
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
 }
-.ha-list-row:active{ background: var(--gray-50); }
+.ha-list-row:active{ background: var(--gray-50); transform: scale(0.985); box-shadow: 0 1px 2px rgba(20,22,28,.04); }
 .ha-list-row-main{ flex: 1 1 auto; min-width: 0; }
 .ha-list-row-title{ font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ha-list-row-sub{ font-size: 11.5px; color: var(--gray-500); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -201,23 +241,29 @@
 .ha-tabbar{
   flex: 0 0 auto;
   display: flex;
-  background: #fff;
-  border-bottom: 1px solid var(--gray-200);
+  gap: 4px;
+  background: var(--gray-100);
+  border-bottom: none;
+  margin: 12px 14px 0;
+  padding: 4px;
+  border-radius: 12px;
 }
 .ha-tab,
 .ha-el-tab{
   flex: 1 1 0;
   border: none;
   background: transparent;
-  padding: 11px 4px;
+  padding: 9px 4px;
   font-size: 11.5px;
   font-weight: 700;
-  color: var(--gray-500);
+  color: var(--gray-600);
   cursor: pointer;
-  border-bottom: 2px solid transparent;
+  border-bottom: none;
+  border-radius: 9px;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
 }
 .ha-tab.active,
-.ha-el-tab.active{ color: var(--blue); border-bottom-color: var(--blue); }
+.ha-el-tab.active{ color: var(--blue); background: #fff; box-shadow: 0 1px 4px rgba(20,22,28,.14); }
 .ha-tabpanel{ display: none; }
 .ha-tabpanel.active{ display: block; }
 
@@ -250,10 +296,11 @@
 
 .ha-stat-card{
   background: #fff;
-  border: 1px solid var(--gray-200);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border: 1px solid var(--gray-100);
+  border-radius: 12px;
+  padding: 11px 13px;
   margin-bottom: 8px;
+  box-shadow: 0 1px 2px rgba(20,22,28,.03);
 }
 .ha-stat-card.changed{ border-color: color-mix(in srgb, var(--red) 45%, var(--gray-200)); background: color-mix(in srgb, var(--red) 5%, white); }
 .ha-stat-card-label{ font-size: 10.5px; font-weight: 700; color: var(--gray-500); text-transform: uppercase; letter-spacing: .02em; }
@@ -263,13 +310,14 @@
 /* ---- Tätigkeitsliste (Tab 2) ---- */
 .ha-task-card{
   background: #fff;
-  border: 1px solid var(--gray-200);
-  border-radius: 12px;
-  padding: 12px 14px;
+  border: 1px solid var(--gray-100);
+  border-radius: 14px;
+  padding: 13px 14px;
   margin-bottom: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  box-shadow: 0 1px 2px rgba(20,22,28,.03), 0 1px 8px rgba(20,22,28,.03);
 }
 /* Tätigkeiten mit zugeordneter Protokoll-Vorlage: die ganze Karte ist
    klickbar und öffnet die Dokumentations-Maske (nicht nur der Button). */
@@ -322,11 +370,13 @@
   color: var(--blue);
   background: var(--blue-light);
   border: none;
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: 10px;
+  padding: 9px 10px;
   cursor: pointer;
   text-align: center;
+  transition: transform .12s ease, background .15s ease;
 }
+.ha-btn-outline:active:not(:disabled){ transform: scale(0.96); background: color-mix(in srgb, var(--blue) 18%, var(--blue-light)); }
 .ha-btn-outline:disabled{ cursor: not-allowed; opacity: .55; }
 .ha-task-doku-hint{ font-size: 11px; color: var(--gray-500); margin-bottom: 2px; }
 /* Genau ein Protokoll zugeordnet: schlanke, tippbare Link-Zeile statt eines
@@ -409,12 +459,14 @@
 }
 .ha-photo-thumb{
   aspect-ratio: 1 / 1;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   background: var(--gray-100);
   border: 1px solid var(--gray-200);
   cursor: pointer;
+  transition: transform .12s ease;
 }
+.ha-photo-thumb:active{ transform: scale(0.94); }
 .ha-photo-thumb img{ width: 100%; height: 100%; object-fit: cover; display: block; }
 .ha-add-photo-btn{
   display: flex;
@@ -423,15 +475,18 @@
   gap: 8px;
   width: 100%;
   margin-bottom: 12px;
-  background: var(--blue);
+  background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
   color: #fff;
   border: none;
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 11px;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 4px 12px -3px rgba(47,111,237,.45);
+  transition: transform .12s ease;
 }
+.ha-add-photo-btn:active{ transform: scale(0.97); }
 
 /* ---- Fotos & Dokumente-Tab: per Datenpfad-Import automatisch hinterlegte
    Dokumente (nur lesend, siehe importierteDokumenteHtml() in handyapp.js) ---- */
@@ -512,20 +567,26 @@
 .ha-bottom-bar{
   flex: 0 0 auto;
   padding: 10px 14px calc(14px + env(safe-area-inset-bottom, 0px));
-  background: #fff;
-  border-top: 1px solid var(--gray-200);
+  background: rgba(255,255,255,.9);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  border-top: 1px solid var(--gray-100);
+  box-shadow: 0 -2px 12px rgba(20,22,28,.05);
 }
 .ha-btn-primary{
   width: 100%;
-  background: var(--blue);
+  background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
   color: #fff;
   border: none;
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: 12px;
+  padding: 13px;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 4px 14px -3px rgba(47,111,237,.5);
+  transition: transform .12s ease, box-shadow .12s ease;
 }
+.ha-btn-primary:active{ transform: scale(0.97); box-shadow: 0 2px 6px -1px rgba(47,111,237,.45); }
 .ha-btn-danger-ghost{
   position: absolute;
   bottom: 28px;
@@ -545,22 +606,35 @@
 .ha-confirm-backdrop{
   position: absolute;
   inset: 0;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(20,22,28,.45);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
   z-index: 40;
   padding: 24px;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity .18s ease;
 }
-.ha-confirm-backdrop:not([hidden]){ display: flex; }
+.ha-confirm-backdrop[hidden]{
+  display: flex;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
 .ha-confirm-box{
   width: 100%;
   max-width: 280px;
   background: #fff;
-  border-radius: 14px;
+  border-radius: 16px;
   padding: 18px 16px 14px;
-  box-shadow: 0 12px 30px rgba(20,22,28,.25);
+  box-shadow: 0 20px 40px rgba(20,22,28,.28);
+  transform: scale(1);
+  transition: transform .18s ease;
 }
+.ha-confirm-backdrop[hidden] .ha-confirm-box{ transform: scale(0.92); }
 .ha-confirm-message{
   font-size: 13.5px;
   color: var(--text);
@@ -600,13 +674,22 @@
 .ha-field textarea{
   width: 100%;
   border: 1px solid var(--gray-300);
-  border-radius: 8px;
-  padding: 9px 10px;
+  border-radius: 10px;
+  padding: 10px 11px;
   font-size: 13.5px;
   color: var(--text);
   background: #fff;
   font-family: inherit;
   outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ha-field input[type="text"]:focus,
+.ha-field input[type="number"]:focus,
+.ha-field input[type="date"]:focus,
+.ha-field select:focus,
+.ha-field textarea:focus{
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-light);
 }
 .ha-field textarea{ min-height: 70px; resize: vertical; }
 .ha-field-auto{
