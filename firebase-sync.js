@@ -351,20 +351,72 @@
   }
 
   // -----------------------------------------------------------------------
+  // Benutzerdatenbank: eigene Firestore-Collection 'users' (ein Dokument pro
+  // Firebase-Auth-Konto, Dokument-ID = UID), unabhängig von SYNC_COLLECTION
+  // (die spiegelt nur die App-Projektdaten, nicht Benutzer/Rollen). Beim
+  // ersten Login eines Kontos wird hier automatisch ein Profil angelegt;
+  // SUPREME_ADMIN_EMAIL bekommt dabei fest die Rolle 'supreme_admin', jedes
+  // andere Konto startet als 'user' (bis ein Supreme Admin die Rolle in der
+  // Benutzerverwaltung - Projekte-Seite, Tab „Vorlagen" - anhebt). Das
+  // aufgelöste Profil steht der übrigen App unter window.intraCurrentUser
+  // zur Verfügung, sobald das zugehörige Promise (window.intraUserReady)
+  // erfüllt ist.
+  //
+  // WICHTIG: Diese Datei kann die Firestore Security Rules NICHT selbst
+  // setzen (kein Konsolen-/CLI-Zugriff aus dieser Umgebung) - ohne
+  // passende Regeln kann sich aktuell jedes eingeloggte Konto auch selbst
+  // eine andere Rolle geben. Siehe intra_systemdokumentation.md, Abschnitt
+  // „Benutzerdatenbank" für die Regeln, die im Firebase Console unter
+  // Firestore -> Regeln eingefügt werden müssen, damit nur ein
+  // supreme_admin fremde Rollen ändern kann.
+  // -----------------------------------------------------------------------
+  var SUPREME_ADMIN_EMAIL = 'wajih.tfaili60@gmail.com';
+  var USERS_COLLECTION = 'users';
+
+  function ensureUserProfile(user) {
+    var ref = db.collection(USERS_COLLECTION).doc(user.uid);
+    return ref.get().then(function (snap) {
+      var nowTs = firebase.firestore.FieldValue.serverTimestamp();
+      if (!snap.exists) {
+        var initialRole = (user.email || '').toLowerCase() === SUPREME_ADMIN_EMAIL.toLowerCase() ? 'supreme_admin' : 'user';
+        var profile = { email: user.email || '', role: initialRole, active: true, createdAt: nowTs, lastLogin: nowTs };
+        return ref.set(profile).then(function () {
+          window.intraCurrentUser = { uid: user.uid, email: profile.email, role: profile.role, active: true };
+        });
+      }
+      var data = snap.data() || {};
+      return ref.set({ lastLogin: nowTs }, { merge: true }).then(function () {
+        window.intraCurrentUser = { uid: user.uid, email: data.email || user.email || '', role: data.role || 'user', active: data.active !== false };
+      });
+    }).catch(function (e) {
+      console.warn('Intra-Sync: Benutzerprofil konnte nicht geladen/angelegt werden', e);
+      // App trotzdem freigeben, mit einem minimalen Fallback-Profil statt
+      // dauerhaft zu blockieren, falls z.B. die Security Rules die
+      // users-Collection noch nicht erlauben.
+      window.intraCurrentUser = { uid: user.uid, email: user.email || '', role: 'user', active: true };
+    });
+  }
+
+  // -----------------------------------------------------------------------
   // Ablauf steuern
   // -----------------------------------------------------------------------
+  var resolveUserReady;
+  window.intraUserReady = new Promise(function (resolve) { resolveUserReady = resolve; });
+
   auth.onAuthStateChanged(function (user) {
     if (!user) {
       renderLoginForm();
       return;
     }
     renderLoading('Anmeldung erfolgreich, Daten werden synchronisiert…');
-    initialSync().then(function () {
+    Promise.all([ensureUserProfile(user), initialSync()]).then(function () {
       startRealtimeListener();
       hideOverlay();
+      resolveUserReady(window.intraCurrentUser);
     }).catch(function (e) {
       console.error('Intra-Sync: Fehler beim Synchronisieren', e);
       hideOverlay(); // App trotzdem freigeben, statt für immer zu blockieren
+      resolveUserReady(window.intraCurrentUser || null);
     });
   });
 })();

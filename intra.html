@@ -254,6 +254,29 @@
           </button>
         </div>
       </div>
+
+      <!-- Benutzerverwaltung: eigene, projektübergreifende Firestore-Collection
+           'users' (siehe firebase-sync.js, ensureUserProfile) - jedes Firebase-
+           Auth-Konto bekommt beim ersten Login automatisch ein Profil mit einer
+           Rolle (user/admin/supreme_admin). Nur für Konten mit ausreichender
+           Rolle sichtbar (usr-panel bleibt hidden, bis usrRenderPanel() das
+           anhand von window.intraCurrentUser prüft), Rollen-Änderung nur für
+           supreme_admin. -->
+      <div class="panel" id="usr-panel" hidden>
+        <div class="panel-header">
+          <span>Benutzerverwaltung</span>
+          <span class="chev">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          </span>
+        </div>
+        <div class="panel-body">
+          <div class="subheading" style="margin-bottom:0;">Wer sich anmelden kann, und mit welcher Rolle</div>
+          <div style="font-size:12px; color:var(--gray-500); margin-top:-8px;">
+            Jedes Firebase-Konto, das sich einmal anmeldet, erscheint hier automatisch. „Supreme Admin" kann Rollen vergeben; „Admin" und „Benutzer" haben aktuell noch gleichen Datenzugriff (Rollen-abhängige Einschränkungen sind vorbereitet, aber noch nicht überall umgesetzt).
+          </div>
+          <div id="usr-list"><div class="changelog-empty">Wird geladen…</div></div>
+        </div>
+      </div>
     </div>
   </div>
 </div>

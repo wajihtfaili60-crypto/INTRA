@@ -7740,6 +7740,98 @@ function btRemoveNode(nodes, id) {
 })();
 
 // ======================================================================
+// Benutzerverwaltung (Projekte-Seite, Tab „Vorlagen"): listet alle Konten
+// aus der Firestore-Collection 'users' (siehe ensureUserProfile in
+// firebase-sync.js - legt bei jedem ersten Login automatisch ein Profil mit
+// Rolle an). Nutzer-Wunsch: "Richte zudem eine Benutzerdatenbank ein. Ich
+// selber bin der Admin Supreme." Nur sichtbar für Konten mit Rolle 'admin'
+// oder 'supreme_admin' (window.intraCurrentUser, gesetzt sobald
+// window.intraUserReady erfüllt ist); Rollen ändern kann ausschließlich
+// 'supreme_admin'. Rein Firestore-basiert (keine localStorage-Daten, keine
+// Projekt-Bindung) - unabhängig von pKey()/currentProjectId(). Nur aktiv,
+// wenn #usr-list existiert (Projekte-Seite) UND Firebase geladen ist.
+// ======================================================================
+(function () {
+  const listEl = document.getElementById('usr-list');
+  const panelEl = document.getElementById('usr-panel');
+  if (!listEl || !panelEl || typeof firebase === 'undefined' || !firebase.firestore) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+  function fmtTimestamp(ts) {
+    if (!ts) return '–';
+    try {
+      const d = typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts);
+      if (isNaN(d.getTime())) return '–';
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch (e) { return '–'; }
+  }
+
+  const ROLE_LABELS = { supreme_admin: 'Supreme Admin', admin: 'Admin', user: 'Benutzer' };
+  const ROLE_OPTIONS = ['user', 'admin', 'supreme_admin'];
+
+  function renderUsers(users, me) {
+    const canEdit = me && me.role === 'supreme_admin';
+    if (!users.length) {
+      listEl.innerHTML = '<div class="changelog-empty">Noch keine Benutzer angemeldet.</div>';
+      return;
+    }
+    // Supreme Admin(s) zuerst, dann Admins, dann Benutzer; innerhalb gleicher
+    // Rolle alphabetisch nach E-Mail - macht die eigene/oberste Rolle sofort
+    // sichtbar statt in einer beliebig sortierten Liste suchen zu müssen.
+    const order = { supreme_admin: 0, admin: 1, user: 2 };
+    const sorted = users.slice().sort((a, b) => {
+      const oa = order[a.role] != null ? order[a.role] : 3;
+      const ob = order[b.role] != null ? order[b.role] : 3;
+      if (oa !== ob) return oa - ob;
+      return String(a.email || '').localeCompare(String(b.email || ''), 'de');
+    });
+    listEl.innerHTML = sorted.map((u) => `
+      <div class="file-row" data-usr-row="${esc(u.id)}" style="align-items:center;">
+        <div class="file-meta">
+          <span class="file-name">${esc(u.email || '(ohne E-Mail)')}${me && u.id === me.uid ? ' <span class="file-section-tag">Sie</span>' : ''}${u.active === false ? ' <span class="file-section-tag" style="color:var(--red);">deaktiviert</span>' : ''}</span>
+          <span class="file-sub">Erstellt ${fmtTimestamp(u.createdAt)} · Zuletzt angemeldet ${fmtTimestamp(u.lastLogin)}</span>
+        </div>
+        ${canEdit && !(u.id === me.uid)
+          ? `<select data-usr-role-select="${esc(u.id)}" style="width:150px; flex:0 0 auto;">${ROLE_OPTIONS.map((r) => `<option value="${r}"${r === u.role ? ' selected' : ''}>${esc(ROLE_LABELS[r] || r)}</option>`).join('')}</select>`
+          : `<span class="ver-badge${u.role === 'supreme_admin' ? ' current' : ''}" style="flex:0 0 auto;">${esc(ROLE_LABELS[u.role] || u.role || 'Benutzer')}</span>`}
+      </div>`).join('');
+    if (canEdit) {
+      listEl.querySelectorAll('[data-usr-role-select]').forEach((sel) => {
+        sel.addEventListener('change', () => {
+          const uid = sel.getAttribute('data-usr-role-select');
+          const newRole = sel.value;
+          firebase.firestore().collection('users').doc(uid).update({ role: newRole }).catch((e) => {
+            alert('Rolle konnte nicht geändert werden: ' + (e && e.message ? e.message : e));
+          });
+        });
+      });
+    }
+  }
+
+  function loadAndRender(me) {
+    firebase.firestore().collection('users').get().then((snap) => {
+      const users = [];
+      snap.forEach((doc) => users.push(Object.assign({ id: doc.id }, doc.data())));
+      renderUsers(users, me);
+    }).catch((e) => {
+      listEl.innerHTML = '<div class="changelog-empty">Benutzerliste konnte nicht geladen werden (' + esc(e && e.message ? e.message : String(e)) + ').</div>';
+    });
+  }
+
+  if (!window.intraUserReady) return;
+  window.intraUserReady.then((me) => {
+    if (!me || (me.role !== 'admin' && me.role !== 'supreme_admin')) return; // Panel bleibt hidden für normale Benutzer
+    panelEl.hidden = false;
+    loadAndRender(me);
+  });
+})();
+
+// ======================================================================
 // Masttafel: real import (native file picker / drag-drop), parsed
 // client-side with SheetJS, with Bauwerksnummer-keyed versioning,
 // column show/hide + freeze + saved views, zoom, a Bauwerk detail modal
