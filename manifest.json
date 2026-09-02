@@ -1,6 +1,6 @@
 {
-  "name": "levelbuild",
-  "short_name": "levelbuild",
+  "name": "Intra",
+  "short_name": "Intra",
   "start_url": "./handyapp.html",
   "scope": "./",
   "display": "standalone",

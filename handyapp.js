@@ -1,6 +1,6 @@
 // ======================================================================
-// levelbuild Handy-App - eigenständige App-Ansicht, die dieselben
-// localStorage-Daten liest/schreibt wie levelbuild.html (dafür wird
+// Intra Handy-App - eigenständige App-Ansicht, die dieselben
+// localStorage-Daten liest/schreibt wie intra.html (dafür wird
 // app.js hier ebenfalls eingebunden - alle darin enthaltenen IIFEs sind
 // auf bestimmte Element-IDs der Hauptseite gescoped und tun hier einfach
 // nichts, nur die obersten Konstanten/Funktionen wie MASTTAFEL_STATE_KEY,
@@ -1800,7 +1800,7 @@
 
   // "Aktualisieren"-Button auf der Projekte-Auswahl: lädt die komplette Seite
   // neu (statt nur die Liste neu zu rendern), da handyapp.js sein
-  // gemeinsames JS-Modul mit levelbuild.html teilt, aber als eigene,
+  // gemeinsames JS-Modul mit intra.html teilt, aber als eigene,
   // separat geöffnete Seite läuft - ein einfacher Reload ist hier der
   // verlässlichste Weg, um sämtliche zwischenzeitlich auf der Hauptseite
   // gemachten Änderungen (neue/umbenannte/gelöschte Projekte, Masttafel-

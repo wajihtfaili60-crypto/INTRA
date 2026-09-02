@@ -1,9 +1,9 @@
 /* =========================================================================
-   levelbuild - Firebase-Anbindung
+   Intra - Firebase-Anbindung
    =========================================================================
    Zwei Aufgaben in einer Datei:
 
-   1) LOGIN: Vor der eigentlichen App (levelbuild.html / handyapp.html) wird
+   1) LOGIN: Vor der eigentlichen App (intra.html / handyapp.html) wird
       ein Vollbild-Overlay mit E-Mail/Passwort-Login gezeigt. Erst nach
       erfolgreichem Login wird das Overlay entfernt.
 
@@ -88,7 +88,7 @@
   function renderLoginForm(errorMessage) {
     overlay.innerHTML =
       '<div id="lb-auth-box">' +
-      '<h1>levelbuild</h1>' +
+      '<h1>Intra</h1>' +
       '<p class="lb-sub">Bitte anmelden, um auf die gemeinsamen Projektdaten zuzugreifen.</p>' +
       '<div id="lb-auth-error" class="' + (errorMessage ? 'show' : '') + '">' + escapeHtml(errorMessage || '') + '</div>' +
       '<form id="lb-auth-form">' +
@@ -172,7 +172,7 @@
     pendingUploads[key] = setTimeout(function () {
       delete pendingUploads[key];
       uploadKey(key, value).catch(function (e) {
-        console.warn('levelbuild-Sync: Hochladen fehlgeschlagen für', key, e);
+        console.warn('Intra-Sync: Hochladen fehlgeschlagen für', key, e);
       });
     }, 700);
   }
@@ -180,7 +180,7 @@
   function scheduleDelete(key) {
     if (pendingUploads[key]) { clearTimeout(pendingUploads[key]); delete pendingUploads[key]; }
     db.collection(SYNC_COLLECTION).doc(docIdFor(key)).delete().catch(function (e) {
-      console.warn('levelbuild-Sync: Löschen fehlgeschlagen für', key, e);
+      console.warn('Intra-Sync: Löschen fehlgeschlagen für', key, e);
     });
   }
 
@@ -238,7 +238,7 @@
       return uploadDataUrlToStorage(b.value, [key].concat(b.path))
         .then(function (url) { setAtPath(clone, b.path, url || ''); })
         .catch(function (e) {
-          console.warn('levelbuild-Sync: Storage-Upload fehlgeschlagen für', key, b.path, e);
+          console.warn('Intra-Sync: Storage-Upload fehlgeschlagen für', key, b.path, e);
           setAtPath(clone, b.path, '');
         });
     });
@@ -249,7 +249,7 @@
 
   function saveDocForKey(key, valueString) {
     if (valueString.length > MAX_DOC_CHARS) {
-      console.warn('levelbuild-Sync: übersprungen (zu groß für Firestore):', key, valueString.length, 'Zeichen');
+      console.warn('Intra-Sync: übersprungen (zu groß für Firestore):', key, valueString.length, 'Zeichen');
       return Promise.resolve();
     }
     return db.collection(SYNC_COLLECTION).doc(docIdFor(key)).set({
@@ -258,7 +258,7 @@
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: (auth.currentUser && auth.currentUser.email) || null
     }).catch(function (e) {
-      console.warn('levelbuild-Sync: Hochladen fehlgeschlagen für', key, e);
+      console.warn('Intra-Sync: Hochladen fehlgeschlagen für', key, e);
     });
   }
 
@@ -346,7 +346,7 @@
       });
       if (changedRemotely) scheduleReload();
     }, function (err) {
-      console.warn('levelbuild-Sync: Listener-Fehler', err);
+      console.warn('Intra-Sync: Listener-Fehler', err);
     });
   }
 
@@ -363,7 +363,7 @@
       startRealtimeListener();
       hideOverlay();
     }).catch(function (e) {
-      console.error('levelbuild-Sync: Fehler beim Synchronisieren', e);
+      console.error('Intra-Sync: Fehler beim Synchronisieren', e);
       hideOverlay(); // App trotzdem freigeben, statt für immer zu blockieren
     });
   });

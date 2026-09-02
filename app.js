@@ -113,7 +113,7 @@ document.querySelectorAll('.link-discard').forEach(el => {
   }
 
   // ---------- "Neues Projekt anlegen"-Modal (nutzt das generische, page-
-  // unabhängige Modal-Grundgerüst am Anfang von levelbuild.html) ----------
+  // unabhängige Modal-Grundgerüst am Anfang von intra.html) ----------
   const modalOverlay = document.getElementById('modal-overlay');
   const modalTitle = document.getElementById('modal-title');
   const modalBody = document.getElementById('modal-body');
@@ -183,7 +183,7 @@ document.querySelectorAll('.link-discard').forEach(el => {
   if (newBtn) newBtn.addEventListener('click', openNewProjectModal);
 
   // Wird vom Router bei jedem Aufruf der Projekte-Seite (auch beim initialen
-  // Laden) aufgerufen - siehe showPage() weiter unten in levelbuild.html.
+  // Laden) aufgerufen - siehe showPage() weiter unten in intra.html.
   // Bewusst kein sofortiger render()-Aufruf hier: loadProjects() greift auf
   // DEMO_PROJECTS/PROJECTS_KEY zu, die als const erst weiter unten in dieser
   // Datei deklariert werden (im Skript-Ausführungszeitpunkt dieser IIFE noch
@@ -9608,7 +9608,7 @@ function btRemoveNode(nodes, id) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
       doc.setTextColor(gray[0], gray[1], gray[2]);
-      doc.text('levelbuild', marginX, pageHeight - 10);
+      doc.text('Intra', marginX, pageHeight - 10);
       doc.text(`Seite ${pageNum} von ${pageCount}`, pageWidth - marginX, pageHeight - 10, { align: 'right' });
       doc.setTextColor(0, 0, 0);
     }
@@ -10276,7 +10276,7 @@ function btRemoveNode(nodes, id) {
 
     const crumbKey = document.getElementById('md-crumb-key');
     if (crumbKey) crumbKey.textContent = `${raw.key} - ${selected}`;
-    document.title = `${raw.key} - ${selected} · levelbuild`;
+    document.title = `${raw.key} - ${selected} · Intra`;
 
     const indexHero = rowIndex
       ? `<div class="mast-index-hero"><span class="mast-index-hero-label">Aktueller Bearbeitungsstand</span><span class="mast-index-hero-value">Index ${esc(rowIndex)}</span></div>`
@@ -11095,7 +11095,7 @@ function btRemoveNode(nodes, id) {
     if (crumbSammlung) crumbSammlung.textContent = raw.sammlungName || 'Sammlung';
     const crumbKey = document.getElementById('ed-crumb-key');
     if (crumbKey) crumbKey.textContent = `${raw.key} - ${selected}`;
-    document.title = `${raw.key} - ${selected} · levelbuild`;
+    document.title = `${raw.key} - ${selected} · Intra`;
 
     // Nutzer-Wunsch (Folgeturn 10): "genau die selben Logiken ... mache
     // alles auf einmal" - spiegelt Mast-Detail's Allgemein-Panel
@@ -11987,7 +11987,7 @@ function btRemoveNode(nodes, id) {
 
   // ---------- Anwesend (Personaleinsatz) / Geräte (Geräteeinsatz) - beide
   // rekursive Baum-Tabellen, aber jeweils mit eigener, an die echte
-  // levelbuild-Maske angelehnter Erfassung (personaleinsatzModalHtml und
+  // Intra-Maske angelehnter Erfassung (personaleinsatzModalHtml und
   // geraeteEinsatzModalHtml weiter unten). Projekt/Kostenstelle und Datum
   // werden dort automatisch aus dem laufenden Projekt/Bautagebuch
   // übernommen (nur lesend), die Leistungszeit wird aus der Arbeitszeit
@@ -13665,7 +13665,7 @@ function btRemoveNode(nodes, id) {
   // Nutzer-Wunsch (Folgeturn 5): "wenn man auf Masttafel klickt will ich
   // wirklich das sich diese Maske hier öffnet" - der reale Masttafel-Block
   // (#overview-expanded, physisch von der Übersicht-Seite hierher verschoben,
-  // siehe levelbuild.html) wird nur noch ein-/ausgeblendet, NIE mehr per
+  // siehe intra.html) wird nur noch ein-/ausgeblendet, NIE mehr per
   // innerHTML neu gebaut - dadurch bleibt die riesige, unveränderte
   // Masttafel-IIFE in app.js komplett unangetastet und funktionsfähig.
   function showMasttafelPanel() {
@@ -13815,7 +13815,7 @@ function btRemoveNode(nodes, id) {
   // Dateiliste links, "Änderungen"-Zusammenfassung + Änderungsbericht-Link
   // rechts) über einem zweiten Panel mit Bauabschnitt-Switcher/Toolbar/
   // Tabelle - exakt dieselben CSS-Klassen wie die echte, statische
-  // Masttafel-Maske (siehe #overview-expanded in levelbuild.html), nur mit
+  // Masttafel-Maske (siehe #overview-expanded in intra.html), nur mit
   // dynamischen Daten aus dem generischen Elementensammlungs-Speicher.
   function fileRowHtml(f) {
     return `

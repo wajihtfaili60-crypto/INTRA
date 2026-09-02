@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
-<title>levelbuild Handy-App</title>
+<title>Intra Handy-App</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2f6fed">
 <!-- Damit die Seite sich nach "Zum Home-Bildschirm hinzufügen" wie eine
@@ -12,11 +12,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="levelbuild">
+<meta name="apple-mobile-web-app-title" content="Intra">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="style.css?v=3">
-<link rel="stylesheet" href="handyapp.css?v=4">
+<link rel="stylesheet" href="handyapp.css?v=5">
 <!-- Fix für den klassischen Mobile-Safari-Bug: "100vh"/"100dvh" berücksichtigt
      die Adressleiste nicht zuverlässig auf allen iOS-Versionen, wodurch Inhalt
      abgeschnitten wirkt und darunter leerer Platz entsteht. Wir setzen daher
@@ -40,13 +40,13 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="firebase-sync.js?v=1"></script>
+<script src="firebase-sync.js?v=2"></script>
 </head>
 <body class="ha-body">
 
 <!-- ==================================================================
-     levelbuild Handy-App - eigenständige, mit der levelbuild-Webapp
-     (levelbuild.html) interagierende App-Ansicht. Sie liest/schreibt
+     Intra Handy-App - eigenständige, mit der Intra-Webapp
+     (intra.html) interagierende App-Ansicht. Sie liest/schreibt
      dieselben localStorage-Daten (Masttafel, Tätigkeitslisten, Protokolle,
      Bauabschnitte) wie die Hauptseite - Änderungen auf der einen Seite
      erscheinen auf der anderen, sobald sie neu geladen wird. Für den
@@ -64,7 +64,7 @@
       <div class="ha-screen active" id="ha-screen-projekte">
         <div class="ha-topbar">
           <div class="ha-topbar-texts">
-            <div class="ha-topbar-title">levelbuild</div>
+            <div class="ha-topbar-title">Intra</div>
             <div class="ha-topbar-sub">Projekt auswählen</div>
           </div>
           <button type="button" class="ha-refresh-btn" id="ha-projekte-refresh" title="Daten aktualisieren" aria-label="Daten aktualisieren">
@@ -278,10 +278,10 @@
     </div>
     <div class="ha-home-indicator"></div>
   </div>
-  <div class="ha-prototype-hint">Prototyp-Ansicht: eigenständige Handy-App, hier zur Vorschau in einem Telefon-Rahmen im Browser dargestellt. Sie liest/schreibt dieselben Daten wie <strong>levelbuild.html</strong>.</div>
+  <div class="ha-prototype-hint">Prototyp-Ansicht: eigenständige Handy-App, hier zur Vorschau in einem Telefon-Rahmen im Browser dargestellt. Sie liest/schreibt dieselben Daten wie <strong>intra.html</strong>.</div>
 </div>
 
-<script src="app.js?v=3"></script>
-<script src="handyapp.js?v=3"></script>
+<script src="app.js?v=4"></script>
+<script src="handyapp.js?v=4"></script>
 </body>
 </html>
