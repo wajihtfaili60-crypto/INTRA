@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Projekte · levelbuild</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== Top bar ===== -->
+<div class="topbar">
+  <div class="burger"><span></span><span></span><span></span></div>
+  <div class="logo">
+    <span class="mark"><span></span><span></span><span></span></span>
+    <span><span class="txt-level">level</span><span class="txt-build">build</span></span>
+  </div>
+  <div class="topbar-search">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" placeholder="Suche">
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="breadcrumb">
+    <span class="current">Projekte</span>
+  </div>
+  <div class="topbar-spacer"></div>
+</div>
+
+<!-- ===== Main content (no project sidebar yet) ===== -->
+<div class="shell">
+  <div class="main" style="flex:1; padding: 24px 28px;">
+    <div class="page-title">Projekte</div>
+
+    <div class="filter-tabs">
+      <div class="tab active">Aktiv</div>
+      <div class="tab">Pausiert</div>
+      <div class="tab">Abgeschlossen</div>
+      <div class="tab">Alle</div>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn-primary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Neues Projekt
+      </button>
+    </div>
+
+    <table class="project-table">
+      <thead>
+        <tr>
+          <th style="width:70px;">Nr.</th>
+          <th>Projektname</th>
+          <th>Adresse</th>
+          <th style="width:150px;">Auftragssumme</th>
+          <th style="width:130px;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-href="uebersicht.html">
+          <td class="nr">67</td>
+          <td class="name">Nordbrand Brauerei Sanierung</td>
+          <td class="addr">Sundhäuser Str. 4</td>
+          <td>2.500.000,00 €</td>
+          <td><span class="badge active">● Aktiv</span></td>
+        </tr>
+        <tr data-href="uebersicht.html">
+          <td class="nr">66</td>
+          <td class="name">Wohnpark Elbaue – Neubau</td>
+          <td class="addr">Elbuferweg 12</td>
+          <td>4.120.000,00 €</td>
+          <td><span class="badge active">● Aktiv</span></td>
+        </tr>
+        <tr data-href="uebersicht.html">
+          <td class="nr">65</td>
+          <td class="name">Logistikzentrum Nord</td>
+          <td class="addr">Gewerbering 9</td>
+          <td>1.860.000,00 €</td>
+          <td><span class="badge paused">● Pausiert</span></td>
+        </tr>
+        <tr data-href="uebersicht.html">
+          <td class="nr">64</td>
+          <td class="name">Sanierung Rathaus Altstadt</td>
+          <td class="addr">Marktplatz 1</td>
+          <td>980.000,00 €</td>
+          <td><span class="badge done">● Abgeschlossen</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

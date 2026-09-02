@@ -1,0 +1,41 @@
+levelbuild - Web-App & Handy-App zum Hochladen
+================================================
+
+In diesem Ordner sind genau die 5 Dateien, die zusammen die komplette
+App bilden:
+
+  levelbuild.html   -> die WEB-APP (Projekte, Masttafel, Bautagebuch,
+                        Fertigstellungsliste, Dokumente, usw.)
+  handyapp.html      -> die HANDY-APP (mobile Vorschau: Projekt wählen,
+                        Masttafel, Mast-Detail mit Tätigkeitsliste/
+                        Protokollen/Fotos)
+  app.js             -> gemeinsame Logik, wird von BEIDEN oben
+                        gebraucht (nicht löschen/umbenennen)
+  style.css          -> gemeinsames Grund-Design
+  handyapp.css        -> Zusatz-Design nur für die Handy-App
+
+Alle 5 Dateien müssen im selben Ordner bleiben (auch nach dem Hochladen),
+da sie sich gegenseitig referenzieren.
+
+So bringst du es online (Beispiel: GitHub Pages, kostenlos):
+--------------------------------------------------------------
+1. Auf github.com ein (kostenloses) Konto anlegen, falls noch nicht
+   vorhanden.
+2. Ein neues Repository anlegen, z.B. "levelbuild".
+3. Alle 5 Dateien aus diesem Ordner per Drag & Drop in das Repository
+   hochladen ("Add file" -> "Upload files").
+4. Unter "Settings" -> "Pages" die Quelle auf den Branch "main" /
+   Ordner "/ (root)" stellen und speichern.
+5. Nach ein bis zwei Minuten ist die App erreichbar unter:
+     https://DEINNAME.github.io/levelbuild/levelbuild.html   (Web-App)
+     https://DEINNAME.github.io/levelbuild/handyapp.html     (Handy-App)
+
+Diese beiden Links dann in SharePoint über den "Embed"-Web-Part auf
+einer Seite einfügen (Seite bearbeiten -> "+" -> "Embed" -> Link
+einfügen).
+
+Wichtig zu wissen: die App speichert aktuell alle Daten nur lokal im
+Browser (kein gemeinsamer Server im Hintergrund) - jeder Nutzer sieht
+nur seine eigenen, lokal gespeicherten Daten. Für eine Demo/Vorschau
+reicht das; für echten Mehrbenutzer-Betrieb bräuchte es zusätzlich
+eine Datenbank im Hintergrund.
