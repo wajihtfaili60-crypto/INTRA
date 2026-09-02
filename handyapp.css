@@ -204,7 +204,8 @@
   background: #fff;
   border-bottom: 1px solid var(--gray-200);
 }
-.ha-tab{
+.ha-tab,
+.ha-el-tab{
   flex: 1 1 0;
   border: none;
   background: transparent;
@@ -215,7 +216,8 @@
   cursor: pointer;
   border-bottom: 2px solid transparent;
 }
-.ha-tab.active{ color: var(--blue); border-bottom-color: var(--blue); }
+.ha-tab.active,
+.ha-el-tab.active{ color: var(--blue); border-bottom-color: var(--blue); }
 .ha-tabpanel{ display: none; }
 .ha-tabpanel.active{ display: block; }
 
@@ -298,7 +300,6 @@
   border: 1px solid currentColor;
 }
 .ha-task-doku-block{ display: flex; flex-direction: column; gap: 6px; }
-.ha-task-doku-status-row{ display: flex; }
 .ha-doku-status{
   display: inline-flex;
   align-items: center;
@@ -310,10 +311,10 @@
   border-radius: 8px;
   color: #fff;
   white-space: nowrap;
+  flex-shrink: 0;
   box-shadow: 0 1px 2px rgba(20,22,28,.12);
 }
 .ha-doku-status svg{ flex-shrink: 0; }
-.ha-task-actions{ display: flex; gap: 8px; }
 .ha-btn-outline{
   flex: 1 1 auto;
   font-size: 12px;
@@ -326,6 +327,79 @@
   cursor: pointer;
   text-align: center;
 }
+.ha-btn-outline:disabled{ cursor: not-allowed; opacity: .55; }
+.ha-task-doku-hint{ font-size: 11px; color: var(--gray-500); margin-bottom: 2px; }
+/* Genau ein Protokoll zugeordnet: schlanke, tippbare Link-Zeile statt eines
+   eigenen umrandeten Buttons - der verlässliche Status sitzt bereits oben
+   an der Karte, hier reicht Symbol + Name + Pfeil. */
+.ha-doku-link-row{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.ha-doku-link-row:active{ background: var(--gray-100); }
+.ha-doku-link-icon{ display: flex; color: var(--blue); flex-shrink: 0; }
+.ha-doku-link-label{ flex: 1; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.ha-doku-link-chevron{ display: flex; color: var(--gray-300); flex-shrink: 0; }
+/* Mehrere Protokolle zugeordnet (Oder-Frage): EINE zusammenhängende
+   Auswahl-Liste statt mehrerer voller Blöcke mit je eigener Statuspille -
+   jede Zeile trägt nur noch ein kleines Symbol (Haken/leerer Kreis/
+   Schloss) statt einer zweiten "Nicht erledigt"-Anzeige. */
+.ha-doku-options{
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ha-doku-option{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: #fff;
+  border: none;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.ha-doku-option + .ha-doku-option{ border-top: 1px solid var(--gray-100); }
+.ha-doku-option:active:not(:disabled){ background: var(--gray-50); }
+.ha-doku-option:disabled{ cursor: not-allowed; }
+.ha-doku-option-filled{ background: color-mix(in srgb, var(--green) 7%, white); }
+.ha-doku-option-locked{ opacity: .55; }
+.ha-doku-option-lead{
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1.5px solid var(--gray-300);
+  color: #fff;
+}
+.ha-doku-option-lead-open{ background: #fff; }
+.ha-doku-option-lead-filled{ background: var(--green); border-color: var(--green); }
+.ha-doku-option-lead-locked{ background: var(--gray-200); border-color: var(--gray-200); color: var(--gray-500); }
+.ha-doku-option-label{ flex: 1; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.ha-doku-option-trail{
+  display: flex;
+  align-items: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--gray-500);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.ha-doku-option-filled .ha-doku-option-trail{ color: var(--green); }
 
 /* ---- Fotos (Tab 3) ---- */
 .ha-gallery{
@@ -357,6 +431,81 @@
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* ---- Fotos & Dokumente-Tab: per Datenpfad-Import automatisch hinterlegte
+   Dokumente (nur lesend, siehe importierteDokumenteHtml() in handyapp.js) ---- */
+.ha-dp-doc-heading{
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--gray-500);
+  margin: 16px 0 8px;
+}
+.ha-dp-doc-list{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ha-dp-doc-row{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--gray-100);
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+.ha-dp-doc-row svg{ flex: 0 0 auto; color: var(--blue); }
+.ha-dp-doc-meta{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ha-dp-doc-name{
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ha-dp-doc-sub{
+  font-size: 11px;
+  color: var(--gray-500);
+}
+.ha-dp-doc-row{ cursor: pointer; }
+
+/* ---- Dokument-Viewer-Overlay: zeigt ein importiertes Dokument direkt in
+   der App an (Bild/PDF), statt es nur herunterzuladen ---- */
+.ha-dok-viewer-body{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1c1e24;
+}
+.ha-dok-viewer-body img{
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.ha-dok-viewer-body iframe{
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+.ha-dok-viewer-unsupported{
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255,255,255,.75);
+  line-height: 1.5;
 }
 
 /* ---- Overlay bottom bar / primary button ---- */

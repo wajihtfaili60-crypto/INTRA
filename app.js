@@ -379,13 +379,22 @@ const PROJECT_SCOPED_BASE_KEYS = [
   'levelbuild_fertigstellungsliste_aktive_liste',
   'levelbuild_protokolle_projekt',
   'levelbuild_taetigkeitslisten_projekt',
+  'levelbuild_taetigkeitsarten_projekt',
   'levelbuild_mast_taetigkeitsliste',
+  'levelbuild_mast_taetigkeitsliste_regeln',
+  'levelbuild_mast_taetigkeitsliste_manuell',
   'levelbuild_mast_aufgaben_status',
   'levelbuild_mast_protokoll_daten',
   'levelbuild_mast_fotos',
   'levelbuild_bautagebuecher',
   'levelbuild_mast_task_abschluss',
   'levelbuild_dokumente',
+  'levelbuild_einkauf_positionen',
+  'levelbuild_einkauf_einstellungen',
+  'levelbuild_bestellungen',
+  'levelbuild_elementensammlungen',
+  'levelbuild_element_daten',
+  'levelbuild_element_aktive_sammlung',
 ];
 function deleteAllProjectData(nr) {
   PROJECT_SCOPED_BASE_KEYS.forEach((base) => {
@@ -488,6 +497,758 @@ function getMastNummernForBauabschnitt(bauabschnittId) {
 }
 
 // ======================================================================
+// Nutzer-Wunsch: "der ereich für den Masttafel Infport soll in einem
+// Übergeordneten Bereich namens Elemente geschoben werden. Die Masttafel
+// selber ist eine Elementensammlung, Es muss eine Wahl geben z.B.
+// Elementensammlung Masttafel, Schweißliste, Weichen/Schwellen Liste,
+// Kabeltiefbau Elemente u.s.w. Alle Logiken werden auch auf diese Anderen
+// Elemente Gezogen." - Schritt 1 (bewusst klein gehalten, siehe Nutzer:
+// "Mach mal schritt für schritt übertreib mal nicht"): Masttafel bleibt
+// technisch 100% unverändert (die riesige, gewachsene Masttafel-IIFE weiter
+// unten wird NICHT angefasst), wird aber als eingebauter erster Eintrag in
+// einer neuen, projektweiten Liste von "Elementensammlungen" geführt.
+// Zusätzliche, frei benannte Elementensammlungen (z. B. "Schweißliste")
+// bekommen einen GENERISCHEN Import + dieselbe Versionierungs-Logik wie die
+// Masttafel (zeilenweiser, whitespace-unempfindlicher Diff gegen die
+// jeweils letzte Version, Schlüssel = erste Spalte) - siehe
+// importGenericElementIntoStore()/esNormalize() unten, bewusst als
+// eigenständige, neue Funktionen (nicht die bestehende Masttafel-Import-
+// Pipeline umgebaut/wiederverwendet), um die bestehende, gut getestete
+// Masttafel-Logik nicht anzufassen. Bauabschnitte-Gruppierung, Tätigkeits-
+// listen-Zuordnung, Fertigstellungsliste-Integration usw. für diese neuen
+// Sammlungen sind bewusst noch NICHT Teil dieses Schritts.
+// ======================================================================
+const ELEMENTENSAMMLUNGEN_KEY = 'levelbuild_elementensammlungen';
+migrateToProjectScopedKey(ELEMENTENSAMMLUNGEN_KEY);
+// Der eingebaute "Masttafel"-Eintrag wird NIE mitgespeichert (siehe
+// saveElementensammlungen unten) - er wird bei jedem Laden frisch vorne
+// angehängt, damit er immer als erster, nicht löschbarer Eintrag erscheint,
+// ohne eine Migration für Bestandsprojekte zu brauchen.
+function loadElementensammlungen() {
+  let list;
+  try { list = JSON.parse(localStorage.getItem(pKey(ELEMENTENSAMMLUNGEN_KEY)) || '[]'); } catch (e) { list = []; }
+  if (!Array.isArray(list)) list = [];
+  return [{ id: 'masttafel', name: 'Masttafel', type: 'masttafel', builtin: true }].concat(list);
+}
+function saveElementensammlungen(list) {
+  const persistable = (list || []).filter((s) => s && s.type !== 'masttafel');
+  try { localStorage.setItem(pKey(ELEMENTENSAMMLUNGEN_KEY), JSON.stringify(persistable)); } catch (e) { /* ignore */ }
+}
+function makeElementensammlungId() {
+  return 'es-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// Nutzer-Wunsch (Folgeturn 3): "es wird gefragt welche Sammlung wollen sie
+// anlegen dort gibt es eine auswahl von Elementenvorlagen die
+// Projektübergeordnet schon angelegt wurden ... dann muss dieses feste
+// Format eingelesen werden" - Elementenvorlagen sind, genau wie die
+// bestehenden Tätigkeitslisten-/Protokoll-Vorlagen, projektübergreifend und
+// leben deshalb bewusst OHNE pKey()/Projekt-Scoping. Jede Vorlage hat ein
+// FESTES Spalten-Format (columns: [{idx, label}]), einmalig festgelegt durch
+// Einlesen einer Beispieldatei beim Anlegen (siehe parseGenericElementSheet
+// weiter unten, verwaltet im neuen "Elementenvorlagen"-Panel auf der
+// Projekte-Seite unter Vorlagen). Eine Elementensammlung in einem Projekt
+// wird danach immer aus genau einer solchen Vorlage erzeugt (Deep-Copy des
+// Formats, siehe createElementensammlungAusVorlage) - ein freier, formatloser
+// Name ist bewusst nicht mehr möglich.
+const ELEMENT_TEMPLATES_KEY = 'levelbuild_elementenvorlagen';
+function loadElementTemplates() {
+  try {
+    const list = JSON.parse(localStorage.getItem(ELEMENT_TEMPLATES_KEY) || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch (e) { return []; }
+}
+function saveElementTemplates(list) {
+  try { localStorage.setItem(ELEMENT_TEMPLATES_KEY, JSON.stringify(list || [])); } catch (e) { /* ignore */ }
+}
+function makeElementTemplateId() {
+  return 'et-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+// Cascade-Helfer (analog zum bestehenden Muster für Tätigkeitslisten-
+// Vorlagen -> Projekt): Deep-Copy des Vorlagen-Formats in eine neue,
+// projekteigene Sammlung. Spätere Änderungen an der Vorlage wirken sich
+// dadurch bewusst NICHT rückwirkend auf schon angelegte Sammlungen aus.
+function createElementensammlungAusVorlage(vorlage) {
+  return {
+    id: makeElementensammlungId(),
+    name: vorlage.name,
+    type: 'custom',
+    vorlageId: vorlage.id,
+    columns: JSON.parse(JSON.stringify(vorlage.columns || [])),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+// Nutzer-Wunsch (Folgeturn): "die Maske eines Elementes muss immer so
+// aussehen wie die Maske der Masttafel" - eine Elementensammlung bekommt
+// deshalb dieselbe Bauabschnitt-Gliederung wie die Masttafel (sections je
+// Bauabschnitt, ein "Alle Bauabschnitte anzeigen"-Zustand), plus Zoom und
+// Spalten ein-/ausblenden nach demselben Bedienkonzept - eine eigene, von
+// MASTTAFEL_STATE_KEY komplett getrennte Struktur, damit die Masttafel-
+// Logik unberührt bleibt: { [sammlungId]: { activeBauabschnittId, zoom,
+// hiddenCols, sections: { [bauabschnittId]: { rowsByKey, changesLog, files } } } }.
+// Das Spalten-Format selbst liegt NICHT mehr hier (war Schritt-2-Stand),
+// sondern fest auf der Elementensammlung selbst (sammlung.columns, aus der
+// Elementenvorlage übernommen, siehe createElementensammlungAusVorlage
+// oben) - alle Bauabschnitte einer Sammlung teilen sich also zwingend
+// dasselbe Format. rowsByKey wie bei der Masttafel als Array von [key,
+// entry]-Paaren serialisiert (Map ist nicht JSON-fähig), entry =
+// { displayKey, versions: [{version, values, importedAt, fileName}] }.
+const ELEMENT_DATEN_KEY = 'levelbuild_element_daten';
+migrateToProjectScopedKey(ELEMENT_DATEN_KEY);
+// Migriert eine einzelne Sammlung auf die aktuelle Form (sections-Form ohne
+// section.columns) - fängt sowohl noch ältere Alt-Daten (ganz ohne sections)
+// als auch den Schritt-2-Stand (mit section.columns) ab, damit nichts crasht.
+function migrateElementEntry(entry) {
+  if (!entry) return { activeBauabschnittId: null, zoom: 100, hiddenCols: [], sections: {} };
+  if (!entry.sections) {
+    if (!entry.rowsByKey) return { activeBauabschnittId: null, zoom: 100, hiddenCols: [], sections: {} };
+    const bas = loadBauabschnitte();
+    const targetId = bas.length ? bas[0].id : 'ba-migriert';
+    entry = {
+      activeBauabschnittId: targetId,
+      zoom: 100,
+      hiddenCols: [],
+      sections: { [targetId]: { rowsByKey: entry.rowsByKey || [], changesLog: entry.changesLog || [], files: entry.files || [] } },
+    };
+  }
+  Object.keys(entry.sections).forEach((baId) => { delete entry.sections[baId].columns; });
+  return entry;
+}
+function loadElementDaten() {
+  let map;
+  try { map = JSON.parse(localStorage.getItem(pKey(ELEMENT_DATEN_KEY)) || '{}'); } catch (e) { map = {}; }
+  Object.keys(map).forEach((id) => { map[id] = migrateElementEntry(map[id]); });
+  return map;
+}
+function saveElementDaten(map) {
+  try { localStorage.setItem(pKey(ELEMENT_DATEN_KEY), JSON.stringify(map)); } catch (e) { /* ignore */ }
+}
+function deleteElementDatenFor(sammlungId) {
+  const map = loadElementDaten();
+  if (sammlungId in map) { delete map[sammlungId]; saveElementDaten(map); }
+}
+// Analog zu deleteMasttafelSectionData() - wird von der Bauabschnitt-Löschen-
+// Aktion in Projekteinstellungen für ALLE Elementensammlungen zugleich
+// aufgerufen (nicht nur die aktuell angezeigte), damit keine verwaisten
+// Bauabschnitt-Daten übrig bleiben.
+function deleteElementSectionData(bauabschnittId) {
+  const map = loadElementDaten();
+  let changed = false;
+  Object.keys(map).forEach((id) => {
+    if (map[id].sections && bauabschnittId in map[id].sections) {
+      delete map[id].sections[bauabschnittId];
+      changed = true;
+    }
+  });
+  if (changed) saveElementDaten(map);
+}
+
+// Nutzer-Wunsch (Folgeturn 10): "genau die selben Logiken ... mache alles
+// auf einmal" - generisches Gegenstück zu window.levelbuildAddManualMastVersion
+// (siehe Masttafel-IIFE weiter unten) für Bauabweichung/Umplanung auf
+// generischen Elementensammlungen. patch: { valuesByIdx: {idx: neuerWert},
+// manualGrund, manualNachweise }. Schreibt direkt in die echten Element-
+// Daten UND aktualisiert den sessionStorage-Handoff der Element-Detail-
+// Seite, damit diese die neue Version sofort sieht, ohne dass die
+// Elemente-Übersicht dafür neu geladen werden müsste. rowKey ist bereits
+// der normalisierte Schlüssel (siehe openElementDetailPage()).
+function levelbuildAddManualElementVersion(sammlungId, bauabschnittId, rowKey, patch) {
+  const map = loadElementDaten();
+  const entry = map[sammlungId];
+  const sec = entry && entry.sections ? entry.sections[bauabschnittId] : null;
+  if (!sec) return null;
+  const rowsByKeyMap = new Map(sec.rowsByKey || []);
+  const rowEntry = rowsByKeyMap.get(rowKey);
+  if (!rowEntry || !rowEntry.versions.length) return null;
+  const latest = rowEntry.versions[rowEntry.versions.length - 1];
+  const newValues = latest.values.slice();
+  Object.keys(patch.valuesByIdx || {}).forEach((idxStr) => {
+    newValues[Number(idxStr)] = patch.valuesByIdx[idxStr];
+  });
+  const newVersion = {
+    version: latest.version + 1,
+    values: newValues,
+    importedAt: new Date().toISOString(),
+    fileName: null,
+    manualType: 'umplanung',
+    manualLabel: 'Umplanung/Braunstrich',
+    manualGrund: patch.manualGrund || '',
+    manualNachweise: patch.manualNachweise || [],
+  };
+  rowEntry.versions.push(newVersion);
+  saveElementDaten(map);
+  try {
+    const raw = JSON.parse(sessionStorage.getItem('levelbuild_element_detail') || 'null');
+    if (raw && raw.sammlungId === sammlungId && raw.rowKey === rowKey) {
+      raw.versions.push(newVersion);
+      sessionStorage.setItem('levelbuild_element_detail', JSON.stringify(raw));
+    }
+  } catch (e) { /* ignore */ }
+  return newVersion;
+}
+window.levelbuildAddManualElementVersion = levelbuildAddManualElementVersion;
+
+// ======================================================================
+// Nutzer-Wunsch (Folgeturn 7): "die App hat dann in einem Projekt natürlich
+// die Option die verschiedenen Elementlisten aufzumachen" mit "voller
+// Parität wie Mast-Detail (3 Tabs)" für Nicht-Masttafel-Elementensammlungen.
+// Das sind PARALLELE, generische Gegenstücke zu MAST_TL_ASSIGNMENT_KEY/
+// MAST_TL_MANUAL_KEY/MAST_TASK_STATUS_KEY/MAST_TASK_ABSCHLUSS_KEY/
+// MAST_FOTOS_KEY (siehe dort) - Masttafel selbst bleibt unverändert und
+// nutzt weiterhin ausschließlich ihre eigenen, unangetasteten Stores. Extra
+// Verschachtelungsebene sammlungId, weil es (anders als bei der Masttafel)
+// mehrere Sammlungen gleichzeitig geben kann.
+const ELEMENT_TL_ASSIGNMENT_KEY = 'levelbuild_element_taetigkeitsliste';
+const ELEMENT_TL_MANUAL_KEY = 'levelbuild_element_taetigkeitsliste_manuell';
+const ELEMENT_TASK_STATUS_KEY = 'levelbuild_element_aufgaben_status';
+const ELEMENT_TASK_ABSCHLUSS_KEY = 'levelbuild_element_task_abschluss';
+const ELEMENT_FOTOS_KEY = 'levelbuild_element_fotos';
+migrateToProjectScopedKey(ELEMENT_TL_ASSIGNMENT_KEY);
+migrateToProjectScopedKey(ELEMENT_TL_MANUAL_KEY);
+migrateToProjectScopedKey(ELEMENT_TASK_STATUS_KEY);
+migrateToProjectScopedKey(ELEMENT_TASK_ABSCHLUSS_KEY);
+migrateToProjectScopedKey(ELEMENT_FOTOS_KEY);
+
+// { [sammlungId]: { [rowKey]: taetigkeitslisteId } }
+function loadElementTlAssignments() {
+  try { return JSON.parse(localStorage.getItem(pKey(ELEMENT_TL_ASSIGNMENT_KEY)) || '{}'); } catch (e) { return {}; }
+}
+function saveElementTlAssignments(map) {
+  try { localStorage.setItem(pKey(ELEMENT_TL_ASSIGNMENT_KEY), JSON.stringify(map)); } catch (e) { /* ignore */ }
+}
+// { [sammlungId]: { [rowKey]: true } } - wie MAST_TL_MANUAL_KEY: schützt eine
+// bewusst einzeln gesetzte Zuordnung vor einer künftigen Regel-Automatik
+// (für generische Sammlungen gibt es aktuell noch keinen Regel-Motor wie bei
+// der Masttafel - dieses Flag ist dafür bereits vorbereitet, aber momentan
+// nur beim manuellen Mehrfachauswahl-Zuordnen relevant).
+function loadElementTlManuell() {
+  try { return JSON.parse(localStorage.getItem(pKey(ELEMENT_TL_MANUAL_KEY)) || '{}'); } catch (e) { return {}; }
+}
+function saveElementTlManuell(map) {
+  try { localStorage.setItem(pKey(ELEMENT_TL_MANUAL_KEY), JSON.stringify(map)); } catch (e) { /* ignore */ }
+}
+// { [sammlungId]: { [rowKey]: { [taskId]: statusOptionId } } }
+function loadElementTaskStatus() {
+  try { return JSON.parse(localStorage.getItem(pKey(ELEMENT_TASK_STATUS_KEY)) || '{}'); } catch (e) { return {}; }
+}
+function saveElementTaskStatus(map) {
+  try { localStorage.setItem(pKey(ELEMENT_TASK_STATUS_KEY), JSON.stringify(map)); } catch (e) { /* ignore */ }
+}
+// { [sammlungId]: { [rowKey]: { [taskId]: { datum: 'YYYY-MM-DD' } } } }
+function loadElementTaskAbschluss() {
+  try { return JSON.parse(localStorage.getItem(pKey(ELEMENT_TASK_ABSCHLUSS_KEY)) || '{}'); } catch (e) { return {}; }
+}
+function saveElementTaskAbschluss(map) {
+  try { localStorage.setItem(pKey(ELEMENT_TASK_ABSCHLUSS_KEY), JSON.stringify(map)); } catch (e) { /* ignore */ }
+}
+// { [sammlungId]: { [rowKey]: [{ id, dataUrl, name, addedAt }] } }
+function loadElementFotos() {
+  try { return JSON.parse(localStorage.getItem(pKey(ELEMENT_FOTOS_KEY)) || '{}'); } catch (e) { return {}; }
+}
+function saveElementFotos(map) {
+  try { localStorage.setItem(pKey(ELEMENT_FOTOS_KEY), JSON.stringify(map)); } catch (e) { /* ignore */ }
+}
+
+// Whitespace-unempfindlicher Vergleich, exakt wie im Masttafel-Import (siehe
+// dortiges normalize()) - eigenständige Kopie, damit diese Datei hier von
+// der Masttafel-IIFE komplett unabhängig bleibt.
+function esNormalize(v) {
+  return String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+}
+function esNormalizeLower(v) {
+  return esNormalize(v).toLowerCase();
+}
+// Nutzer-Wunsch: "Ja also immer ab Spalte 1 abwärz der Kopf muss halt
+// erkannt werden" - liest eine xlsx-Datei generisch ein: Kopfzeile = erste
+// Zeile mit mindestens 2 ausgefüllten Zellen (robuster als stur "immer Zeile
+// 1", falls z. B. eine leere Titelzeile davorsteht), Spalten-Label = Zellen-
+// text dieser Zeile (Fallback "Spalte N" bei leerer Kopfzeile). Bewusst kein
+// Merge-Zellen-/Mehrzeilen-Header-Rekonstruktion wie bei der Masttafel (dort
+// nötig wegen der komplexen PDF-Herkunft) und bewusst kein PDF/OCR-Import -
+// das ist bei der Masttafel-spezifischen 33-Spalten-Erkennung eng an das
+// eine bekannte Masttafel-Layout gekoppelt und lässt sich nicht generisch
+// auf beliebige Elementensammlungen übertragen. Wird heute nur noch beim
+// EINMALIGEN Anlegen/Bearbeiten einer Elementenvorlage verwendet (dort wird
+// aus einer Beispieldatei das feste Format abgeleitet) - der laufende Import
+// in eine Sammlung läuft seitdem gegen dieses feste Format, siehe
+// parseFixedFormatSheet() unten.
+function parseGenericElementSheet(ws) {
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  let headerRowIdx = 0;
+  for (let r = 0; r < aoa.length; r++) {
+    const filled = (aoa[r] || []).filter((c) => String(c == null ? '' : c).trim() !== '').length;
+    if (filled >= 2) { headerRowIdx = r; break; }
+  }
+  const headerRow = aoa[headerRowIdx] || [];
+  const colCount = Math.max(headerRow.length, ...(aoa.slice(headerRowIdx + 1).map((r) => r.length)), 1);
+  const columns = [];
+  for (let c = 0; c < colCount; c++) {
+    const label = String(headerRow[c] == null ? '' : headerRow[c]).trim() || `Spalte ${c + 1}`;
+    columns.push({ idx: c, label });
+  }
+  const rows = aoa.slice(headerRowIdx + 1)
+    .filter((r) => (r || []).some((c) => String(c == null ? '' : c).trim() !== ''))
+    .map((r) => ({ values: columns.map((c) => (r[c.idx] == null ? '' : String(r[c.idx]))) }));
+  return { columns, rows };
+}
+// Nutzer-Wunsch (Folgeturn 3): Import einer Elementensammlung läuft gegen
+// das FESTE Format ihrer Elementenvorlage, nicht mehr gegen eine pro Import
+// neu erkannte Kopfzeile. Sucht in der Kopfzeile der Datei für jede
+// erwartete Spalten-Bezeichnung (Groß-/Kleinschreibung und Leerraum werden
+// ignoriert) die passende Spalte und ordnet die Werte in der festen
+// Reihenfolge der Vorlage an - die Spaltenreihenfolge in der Datei selbst
+// spielt also keine Rolle. Fehlt eine erwartete Spalte in der Datei, bleibt
+// sie in jeder Zeile leer; solche fehlenden Spalten werden als "missing"
+// zurückgegeben, damit die UI den Nutzer warnen kann.
+function parseFixedFormatSheet(ws, fixedColumns) {
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  let headerRowIdx = 0;
+  for (let r = 0; r < aoa.length; r++) {
+    const filled = (aoa[r] || []).filter((c) => String(c == null ? '' : c).trim() !== '').length;
+    if (filled >= 2) { headerRowIdx = r; break; }
+  }
+  const headerRow = aoa[headerRowIdx] || [];
+  const fileColIndexByLabel = new Map();
+  headerRow.forEach((cell, i) => {
+    const key = esNormalizeLower(cell);
+    if (key && !fileColIndexByLabel.has(key)) fileColIndexByLabel.set(key, i);
+  });
+  const missing = [];
+  const mapping = fixedColumns.map((c) => {
+    const idx = fileColIndexByLabel.get(esNormalizeLower(c.label));
+    if (idx === undefined) missing.push(c.label);
+    return idx;
+  });
+  const rows = aoa.slice(headerRowIdx + 1)
+    .filter((r) => (r || []).some((c) => String(c == null ? '' : c).trim() !== ''))
+    .map((r) => ({ values: mapping.map((idx) => (idx === undefined || r[idx] == null) ? '' : String(r[idx])) }));
+  return { rows, missing };
+}
+// ======================================================================
+// Nutzer-Wunsch (Folgeturn 11): "eine Möglichkeit ... in den Excel Dateien
+// die eingelesen werden einen Link zu einem Dokumentenpfad mir rein zu
+// setzen. Wenn dann aber eingelesen wird wird wirklich die Datei zu dem
+// Standort hinterlegt und auch in der App angezeugt." Konkretisiert: eine
+// Spalte mit Namensschema "Datenpfad <Dokumentname>" (z. B. "Datenpfad
+// Lagepläne") wird NIE als normale Tabellenspalte übernommen - ihr Zellwert
+// ist ein lokaler Ordner-/Dateipfad, der beim Import aufgelöst wird (über
+// die File System Access API, siehe ensureOrdnerZugriff/findEntryByRelativePath
+// unten) und als echtes Dokument am jeweiligen Datensatz (Mast bzw.
+// generisches Element) hinterlegt wird - sichtbar über die "Dokumente"-
+// Kachel im Verknüpfungen-Panel (Mast-Detail/Element-Detail) und im
+// "Fotos & Dokumente"-Tab der Handy-App. Gilt für Masttafel UND
+// Elementensammlungen gleichermaßen (siehe parseWorkbookSheet-Änderung
+// unten für die Masttafel, bzw. hier für Elementensammlungen - dort ist
+// keine Änderung an parseFixedFormatSheet nötig, da sie ohnehin nur exakt
+// die in der Vorlage definierten Spalten übernimmt und alles andere
+// ignoriert).
+//
+// Browser dürfen aus Sicherheitsgründen nicht selbstständig auf einen
+// beliebigen lokalen Dateipfad zugreifen, nur weil er als Text in einer
+// Zelle steht - das ist technisch nicht möglich, unabhängig von der
+// Implementierung. Die File System Access API (showDirectoryPicker) ist
+// der einzige Weg: der Nutzer verknüpft EINMAL (Projekteinstellungen oder
+// bei Bedarf direkt beim Import) einen übergeordneten Ordner; danach werden
+// Pfade aus der Excel-Datei relativ zu diesem verknüpften Ordner aufgelöst
+// (oder per Dateiname-Suche gefunden, falls die exakte Ordnerstruktur nicht
+// übereinstimmt). Nur in Chrome/Edge (u. ä.) verfügbar - Firefox/Safari
+// unterstützen diese API bislang nicht, dort bleibt der Pfad unaufgelöst.
+// ======================================================================
+
+// Erkennt "Datenpfad <Name>"-Spalten in der ROHEN Kopfzeile einer Excel-
+// Datei (unabhängig vom sonstigen Spaltenformat) und liest je Datenzeile
+// den Pfad-Wert aus. keyColumnLabel (optional): bei Elementensammlungen
+// liegt die Schlüsselspalte nicht zwingend an Position 0 der Datei, sondern
+// wird - wie beim übrigen Import auch - über ihre Vorlagen-Bezeichnung in
+// der echten Kopfzeile gesucht (fehlt sie, wird Position 0 angenommen, wie
+// bei der Masttafel, deren Bau-Nr.-Spalte immer ganz links steht).
+// Windows legt beim "Pfad kopieren" (Rechtsklick/Umschalt+Rechtsklick im
+// Explorer) automatisch Anführungszeichen um den Pfad - ein sehr gängiger
+// Weg, wie Nutzer überhaupt an einen Pfad zum Einfügen kommen. Damit ein so
+// eingefügter Pfad nicht an genau diesem Umstand scheitert, werden ein
+// einzelnes umschließendes Anführungszeichen-Paar (gerade oder typografisch)
+// hier großzügig entfernt, bevor der Pfad weiterverwendet wird.
+function stripPathQuotes(p) {
+  const s = String(p == null ? '' : p).trim();
+  const m = /^["'“”‘’](.*)["'“”‘’]$/.exec(s);
+  return m ? m[1].trim() : s;
+}
+function extractDatenpfadRefs(ws, keyColumnLabel) {
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  let headerRowIdx = 0;
+  for (let r = 0; r < aoa.length; r++) {
+    const filled = (aoa[r] || []).filter((c) => String(c == null ? '' : c).trim() !== '').length;
+    if (filled >= 2) { headerRowIdx = r; break; }
+  }
+  const headerRow = aoa[headerRowIdx] || [];
+  const defs = [];
+  headerRow.forEach((cell, i) => {
+    const label = String(cell == null ? '' : cell).trim();
+    const m = /^Datenpfad\b[:\-\s]*(.*)$/i.exec(label);
+    if (m) defs.push({ idx: i, docType: (m[1] || '').trim() || 'Dokument' });
+  });
+  if (!defs.length) return [];
+  let keyIdx = 0;
+  if (keyColumnLabel) {
+    const found = headerRow.findIndex((c) => esNormalizeLower(c) === esNormalizeLower(keyColumnLabel));
+    if (found >= 0) keyIdx = found;
+  }
+  const refs = [];
+  aoa.slice(headerRowIdx + 1).forEach((row) => {
+    const rawKey = row[keyIdx];
+    const key = String(rawKey == null ? '' : rawKey).trim();
+    if (!key) return;
+    defs.forEach((d) => {
+      const raw = row[d.idx];
+      const pathVal = stripPathQuotes(raw);
+      if (pathVal) refs.push({ rowKey: rawKey, docType: d.docType, path: pathVal });
+    });
+  });
+  return refs;
+}
+
+// ---------- Ordner-Verknüpfung (File System Access API) ----------
+// Der einmal verknüpfte Ordner-Handle wird in IndexedDB abgelegt (nicht
+// localStorage - Handles sind nicht JSON-serialisierbar, IndexedDB kann sie
+// aber direkt strukturiert klonen), projekt-gescoped über denselben
+// pKey()-Mechanismus wie alles andere.
+const DATENPFAD_DB_NAME = 'levelbuild_datenpfad_db';
+const DATENPFAD_DB_STORE = 'ordner';
+function openDatenpfadDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) { reject(new Error('IndexedDB nicht verfügbar')); return; }
+    const req = indexedDB.open(DATENPFAD_DB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(DATENPFAD_DB_STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function saveOrdnerHandle(key, handle) {
+  const db = await openDatenpfadDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DATENPFAD_DB_STORE, 'readwrite');
+    tx.objectStore(DATENPFAD_DB_STORE).put(handle, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function loadOrdnerHandle(key) {
+  const db = await openDatenpfadDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DATENPFAD_DB_STORE, 'readonly');
+    const req = tx.objectStore(DATENPFAD_DB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function clearOrdnerHandle(key) {
+  const db = await openDatenpfadDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DATENPFAD_DB_STORE, 'readwrite');
+    tx.objectStore(DATENPFAD_DB_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+function datenpfadOrdnerDbKey() { return pKey('datenpfad_ordner'); }
+
+// promptIfMissing=true darf NUR direkt aus einem Klick-Handler heraus
+// aufgerufen werden (showDirectoryPicker()/requestPermission() verlangen
+// eine echte Nutzer-Geste, sonst wirft der Browser einen SecurityError) -
+// beim automatischen Import (FileReader.onload) also immer false, dort wird
+// nur eine bereits erteilte Berechtigung stillschweigend geprüft.
+async function ensureOrdnerZugriff(promptIfMissing) {
+  if (!window.showDirectoryPicker) return { ok: false, reason: 'unsupported' };
+  const dbKey = datenpfadOrdnerDbKey();
+  let handle = null;
+  try { handle = await loadOrdnerHandle(dbKey); } catch (e) { handle = null; }
+  if (handle) {
+    try {
+      const perm = await handle.queryPermission({ mode: 'read' });
+      if (perm === 'granted') return { ok: true, handle };
+      if (perm === 'prompt' && promptIfMissing) {
+        const req = await handle.requestPermission({ mode: 'read' });
+        if (req === 'granted') return { ok: true, handle };
+      }
+    } catch (e) { /* Handle ungültig/veraltet - unten neu verknüpfen */ }
+  }
+  if (!promptIfMissing) return { ok: false, reason: handle ? 'permission' : 'not-linked' };
+  try {
+    const newHandle = await window.showDirectoryPicker();
+    await saveOrdnerHandle(dbKey, newHandle);
+    return { ok: true, handle: newHandle };
+  } catch (e) {
+    return { ok: false, reason: 'cancelled' };
+  }
+}
+async function getVerknuepfterOrdnerName() {
+  try {
+    const handle = await loadOrdnerHandle(datenpfadOrdnerDbKey());
+    return handle ? handle.name : null;
+  } catch (e) { return null; }
+}
+async function trenneOrdner() {
+  try { await clearOrdnerHandle(datenpfadOrdnerDbKey()); } catch (e) { /* ignore */ }
+}
+
+// ---------- Pfad-Auflösung innerhalb des verknüpften Ordners ----------
+function splitPathSegments(p) {
+  return String(p || '').split(/[\\/]+/).map((s) => s.trim()).filter(Boolean);
+}
+async function walkDownFromSegments(rootHandle, segments) {
+  let cur = rootHandle;
+  for (let i = 0; i < segments.length - 1; i++) {
+    cur = await cur.getDirectoryHandle(segments[i]);
+  }
+  const last = segments[segments.length - 1];
+  try {
+    return { kind: 'file', handle: await cur.getFileHandle(last) };
+  } catch (e) {
+    return { kind: 'dir', handle: await cur.getDirectoryHandle(last) };
+  }
+}
+async function searchByNameRecursive(dirHandle, targetNameLower, budget) {
+  if (budget.visited > budget.limit) return null;
+  const subDirs = [];
+  for await (const [name, handle] of dirHandle.entries()) {
+    budget.visited++;
+    if (budget.visited > budget.limit) return null;
+    if (name.toLowerCase() === targetNameLower) {
+      return { kind: handle.kind === 'file' ? 'file' : 'dir', handle };
+    }
+    if (handle.kind === 'directory') subDirs.push(handle);
+  }
+  for (const sub of subDirs) {
+    const found = await searchByNameRecursive(sub, targetNameLower, budget);
+    if (found) return found;
+  }
+  return null;
+}
+// Versucht, einen absoluten lokalen Pfad (wie er in der Excel-Zelle steht)
+// innerhalb des verknüpften Ordners zu finden - erst relativ (Name des
+// verknüpften Ordners taucht im Pfad auf, alles danach wird durchlaufen),
+// dann als kompletter Pfad relativ zur Wurzel selbst, zuletzt per
+// rekursiver Dateiname-Suche im gesamten verknüpften Baum (begrenzt, um
+// sehr große Ordnerstrukturen nicht unbegrenzt zu durchsuchen).
+async function findEntryByRelativePath(rootHandle, absolutePath) {
+  const segments = splitPathSegments(absolutePath);
+  if (!segments.length) return null;
+  const rootNameLower = rootHandle.name.toLowerCase();
+  const idx = segments.findIndex((s) => s.toLowerCase() === rootNameLower);
+  if (idx >= 0 && idx < segments.length - 1) {
+    try { return await walkDownFromSegments(rootHandle, segments.slice(idx + 1)); } catch (e) { /* weiter */ }
+  }
+  try { return await walkDownFromSegments(rootHandle, segments); } catch (e) { /* weiter */ }
+  const target = segments[segments.length - 1].toLowerCase();
+  try { return await searchByNameRecursive(rootHandle, target, { visited: 0, limit: 8000 }); } catch (e) { return null; }
+}
+async function fileHandleToDatenpfadDoc(fileHandle, meta) {
+  const file = await fileHandle.getFile();
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  const mime = file.type || 'application/octet-stream';
+  return {
+    id: 'dp-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    name: file.name,
+    typ: meta.docType,
+    quellPfad: meta.path,
+    size: file.size,
+    mime,
+    url: 'data:' + mime + ';base64,' + uint8ToBase64Global(bytes),
+    attachedAt: new Date().toISOString(),
+    sourceFile: meta.sourceFileName || null,
+  };
+}
+async function resolveDatenpfadEntry(rootHandle, ref) {
+  const found = await findEntryByRelativePath(rootHandle, ref.path);
+  if (!found) return { ref, docs: [] };
+  if (found.kind === 'file') {
+    const doc = await fileHandleToDatenpfadDoc(found.handle, ref);
+    return { ref, docs: [doc] };
+  }
+  const docs = [];
+  for await (const [, entry] of found.handle.entries()) {
+    if (entry.kind === 'file') docs.push(await fileHandleToDatenpfadDoc(entry, ref));
+  }
+  return { ref, docs };
+}
+// Löst alle "Datenpfad …"-Verweise einer Import-Datei auf und ruft attachFn
+// (rowKeyRaw, docs[]) für jeden Treffer auf. Läuft NACH dem eigentlichen
+// (synchronen) Datenimport, da sie selbst asynchron ist - der Import selbst
+// wartet nicht darauf. onStatus (optional) wird mit einem Abschluss-Objekt
+// {attached, notFound, linked, reason} aufgerufen, sobald fertig - z. B. um
+// den Nutzer auf einen noch nicht verknüpften Ordner hinzuweisen.
+async function resolveAndAttachDatenpfade(refs, sourceFileName, attachFn, promptIfMissing, onStatus) {
+  if (!refs || !refs.length) { if (onStatus) onStatus({ attached: 0, notFound: 0, linked: true, reason: null }); return; }
+  const access = await ensureOrdnerZugriff(!!promptIfMissing);
+  if (!access.ok) { if (onStatus) onStatus({ attached: 0, notFound: 0, linked: false, reason: access.reason }); return; }
+  let attached = 0, notFound = 0;
+  for (const ref of refs) {
+    try {
+      const result = await resolveDatenpfadEntry(access.handle, Object.assign({}, ref, { sourceFileName }));
+      if (result.docs.length) { attachFn(ref.rowKey, result.docs); attached += result.docs.length; }
+      else notFound++;
+    } catch (e) { notFound++; }
+  }
+  if (onStatus) onStatus({ attached, notFound, linked: true, reason: null });
+}
+
+// Wird nach JEDEM Excel-Import (Masttafel + Elementensammlungen) mit den
+// gefundenen Datenpfad-Verweisen dieser Datei aufgerufen. Versucht zunächst
+// still (ohne Berechtigungs-Dialog) aufzulösen - ist noch kein Ordner
+// verknüpft (oder die Berechtigung abgelaufen), wird ein kleines Modal mit
+// einem "Ordner verknüpfen"-Button gezeigt (dessen eigener Klick eine
+// gültige Nutzer-Geste für showDirectoryPicker() ist). attachFn(rowKeyRaw,
+// docs[]) hinterlegt die gefundenen Dokumente projektspezifisch.
+function handleDatenpfadAfterImport(refs, fileName, attachFn) {
+  if (!refs || !refs.length) return;
+  const docTypeNames = Array.from(new Set(refs.map((r) => r.docType)));
+  resolveAndAttachDatenpfade(refs, fileName, attachFn, false, (status) => {
+    if (status.linked) {
+      if (status.attached || status.notFound) {
+        console.log(`Datenpfad-Import: ${status.attached} Dokument(e) hinterlegt, ${status.notFound} Verweis(e) nicht gefunden.`);
+      }
+      return;
+    }
+    if (status.reason === 'unsupported') {
+      alert('Diese Datei enthält Datenpfad-Verweise (' + docTypeNames.join(', ') + '), aber dieser Browser unterstützt das automatische Einlesen lokaler Dateien nicht (nur Chrome/Edge u. ä.). Die Dokumente müssen manuell hinzugefügt werden.');
+      return;
+    }
+    const overlay = document.getElementById('modal-overlay');
+    const titleEl = document.getElementById('modal-title');
+    const bodyEl = document.getElementById('modal-body');
+    const footerEl = document.getElementById('modal-footer');
+    if (!overlay || !titleEl || !bodyEl || !footerEl) return;
+    titleEl.textContent = 'Ordner für Dokumente verknüpfen';
+    bodyEl.innerHTML = `<div style="font-size:13px; color:var(--gray-500); line-height:1.5;">
+      Diese Datei enthält ${refs.length} Datenpfad-Verweis(e) (${esc(docTypeNames.join(', '))}). Um diese Dokumente automatisch einzulesen, muss einmalig ein übergeordneter Ordner verknüpft werden - der Browser fragt danach einmalig nach der Berechtigung.
+    </div>`;
+    footerEl.innerHTML = `<button type="button" class="matt-tool-btn" id="dp-link-cancel">Später</button>
+      <button type="button" class="btn-primary" id="dp-link-now">Ordner verknüpfen</button>`;
+    overlay.hidden = false;
+    function esc(v) { const d = document.createElement('div'); d.textContent = v == null ? '' : String(v); return d.innerHTML; }
+    const cancelBtn = document.getElementById('dp-link-cancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => { overlay.hidden = true; });
+    const linkBtn = document.getElementById('dp-link-now');
+    if (linkBtn) linkBtn.addEventListener('click', () => {
+      resolveAndAttachDatenpfade(refs, fileName, attachFn, true, (status2) => {
+        overlay.hidden = true;
+        if (status2.linked) {
+          alert(`Ordner verknüpft: ${status2.attached} Dokument(e) hinterlegt${status2.notFound ? ', ' + status2.notFound + ' Verweis(e) nicht gefunden' : ''}.`);
+        } else if (status2.reason !== 'cancelled') {
+          alert('Ordner konnte nicht verknüpft werden.');
+        }
+      });
+    });
+  });
+}
+
+// ---------- Speicher der aufgelösten Dokumente ----------
+// Mast-Dokumente: { [mastKeyNormalized]: [doc, ...] } - eigener, von
+// DOKUMENTE_KEY (Protokoll-generierte PDFs) unabhängiger Speicher, analog
+// zum übrigen "paralleles System statt bestehenden Code verändern"-Muster
+// dieser Codebasis.
+const MAST_DOKUMENTE_KEY = 'levelbuild_mast_datenpfad_dokumente';
+migrateToProjectScopedKey(MAST_DOKUMENTE_KEY);
+function loadMastDatenpfadDokumente() {
+  try { return JSON.parse(localStorage.getItem(pKey(MAST_DOKUMENTE_KEY)) || '{}'); } catch (e) { return {}; }
+}
+function saveMastDatenpfadDokumente(m) {
+  try { localStorage.setItem(pKey(MAST_DOKUMENTE_KEY), JSON.stringify(m)); } catch (e) { /* ignore */ }
+}
+function attachMastDatenpfadDokumente(mastKeyRaw, docs) {
+  if (!docs || !docs.length) return;
+  const key = esNormalize(mastKeyRaw);
+  if (!key) return;
+  const map = loadMastDatenpfadDokumente();
+  map[key] = (map[key] || []).concat(docs);
+  saveMastDatenpfadDokumente(map);
+}
+function getMastDatenpfadDokumente(mastKeyRaw) {
+  return loadMastDatenpfadDokumente()[esNormalize(mastKeyRaw)] || [];
+}
+
+// Element-Dokumente: { [sammlungId]: { [bauabschnittId]: { [rowKeyNormalized]: [doc, ...] } } }
+const ELEMENT_DOKUMENTE_KEY = 'levelbuild_element_datenpfad_dokumente';
+migrateToProjectScopedKey(ELEMENT_DOKUMENTE_KEY);
+function loadElementDatenpfadDokumente() {
+  try { return JSON.parse(localStorage.getItem(pKey(ELEMENT_DOKUMENTE_KEY)) || '{}'); } catch (e) { return {}; }
+}
+function saveElementDatenpfadDokumente(m) {
+  try { localStorage.setItem(pKey(ELEMENT_DOKUMENTE_KEY), JSON.stringify(m)); } catch (e) { /* ignore */ }
+}
+function attachElementDatenpfadDokumente(sammlungId, bauabschnittId, rowKeyRaw, docs) {
+  if (!docs || !docs.length) return;
+  const key = esNormalize(rowKeyRaw);
+  if (!key) return;
+  const map = loadElementDatenpfadDokumente();
+  const s = map[sammlungId] || {};
+  const b = s[bauabschnittId] || {};
+  b[key] = (b[key] || []).concat(docs);
+  s[bauabschnittId] = b;
+  map[sammlungId] = s;
+  saveElementDatenpfadDokumente(map);
+}
+function getElementDatenpfadDokumente(sammlungId, bauabschnittId, rowKeyRaw) {
+  const map = loadElementDatenpfadDokumente();
+  const s = map[sammlungId] || {};
+  const b = s[bauabschnittId] || {};
+  return b[esNormalize(rowKeyRaw)] || [];
+}
+
+// Versionierung/Diff exakt wie Masttafel importIntoStore (zeilenweiser,
+// whitespace-unempfindlicher Vergleich gegen die jeweils letzte Version, pro
+// geändertem Feld ein eigener changesLog-Eintrag für den Änderungsbericht,
+// neue Version nur bei tatsächlicher Änderung) - eigenständige, von der
+// Masttafel-IIFE unabhängige Funktion. Import landet immer im übergebenen
+// Bauabschnitt dieser Sammlung. Schlüssel = erste Spalte (values[0]).
+function importGenericElementIntoStore(sammlungId, bauabschnittId, fixedColumns, parsedRows, fileMeta) {
+  const map = loadElementDaten();
+  const entry = map[sammlungId] || { activeBauabschnittId: bauabschnittId, zoom: 100, hiddenCols: [], sections: {} };
+  const section = entry.sections[bauabschnittId] || { rowsByKey: [], changesLog: [], files: [] };
+  const rowsByKeyMap = new Map(section.rowsByKey || []);
+  const summary = { newKeys: 0, changedKeys: 0, unchangedKeys: 0 };
+  parsedRows.forEach((row) => {
+    const rawKey = row.values[0];
+    const key = esNormalize(rawKey);
+    if (!key) return;
+    const existing = rowsByKeyMap.get(key);
+    if (!existing) {
+      rowsByKeyMap.set(key, { displayKey: rawKey, versions: [{ version: 1, values: row.values, importedAt: fileMeta.importedAt, fileName: fileMeta.name }] });
+      summary.newKeys++;
+      return;
+    }
+    const latest = existing.versions[existing.versions.length - 1];
+    const diffs = [];
+    for (let i = 0; i < row.values.length; i++) {
+      const a = esNormalize(latest.values[i]);
+      const b = esNormalize(row.values[i]);
+      if (a !== b) diffs.push({ colLabel: fixedColumns[i] ? fixedColumns[i].label : 'Spalte ' + (i + 1), oldVal: latest.values[i], newVal: row.values[i] });
+    }
+    if (!diffs.length) { summary.unchangedKeys++; return; }
+    const newVersion = latest.version + 1;
+    existing.versions.push({ version: newVersion, values: row.values, importedAt: fileMeta.importedAt, fileName: fileMeta.name });
+    section.changesLog = section.changesLog || [];
+    diffs.forEach((d) => {
+      section.changesLog.push({
+        key: existing.displayKey, fromVersion: latest.version, toVersion: newVersion,
+        colLabel: d.colLabel, oldVal: d.oldVal, newVal: d.newVal,
+        importedAt: fileMeta.importedAt, fileName: fileMeta.name,
+      });
+    });
+    summary.changedKeys++;
+  });
+  section.rowsByKey = Array.from(rowsByKeyMap.entries());
+  section.files = (section.files || []).concat([fileMeta]);
+  entry.sections[bauabschnittId] = section;
+  entry.activeBauabschnittId = bauabschnittId;
+  map[sammlungId] = entry;
+  saveElementDaten(map);
+  return summary;
+}
+
+// ======================================================================
 // Projekteinstellungen: Bauabschnitte anlegen, umbenennen, löschen. Only
 // runs on the Projekteinstellungen page (guarded by the #ba-list element).
 // ======================================================================
@@ -533,6 +1294,7 @@ function getMastNummernForBauabschnitt(bauabschnittId) {
         const items2 = loadBauabschnitte().filter((x) => x.id !== id);
         saveBauabschnitte(items2);
         deleteMasttafelSectionData(id);
+        deleteElementSectionData(id);
         render();
       });
     });
@@ -566,6 +1328,125 @@ function getMastNummernForBauabschnitt(bauabschnittId) {
     if (prevOnShowPE1) prevOnShowPE1();
     render();
   };
+})();
+
+// ======================================================================
+// Bestelldaten (Einkauf): projekt-gescopte Vorbelegung für neue
+// Bestellungen (Kostenstelle, Bauvorhaben, Einkäufer, Lieferanschrift) -
+// siehe EINKAUF_EINSTELLUNGEN_KEY weiter oben. Nur aktiv, wenn #eke-save
+// existiert (Projekteinstellungen-Seite).
+// ======================================================================
+(function () {
+  const saveBtn = document.getElementById('eke-save');
+  if (!saveBtn) return;
+
+  const FIELD_IDS = {
+    kostenstelle: 'eke-kostenstelle',
+    bauvorhaben: 'eke-bauvorhaben',
+    einkaeuferName: 'eke-einkaeufer-name',
+    einkaeuferTelefon: 'eke-einkaeufer-telefon',
+    einkaeuferEmail: 'eke-einkaeufer-email',
+    lieferanschriftFirma: 'eke-lieferanschrift-firma',
+    lieferanschriftZusatz: 'eke-lieferanschrift-zusatz',
+    lieferanschriftStrasse: 'eke-lieferanschrift-strasse',
+    lieferanschriftPlzOrt: 'eke-lieferanschrift-plzort',
+  };
+
+  function render() {
+    const obj = loadEinkaufEinstellungen();
+    Object.keys(FIELD_IDS).forEach((key) => {
+      const el = document.getElementById(FIELD_IDS[key]);
+      if (el) el.value = obj[key] || '';
+    });
+    const hint = document.getElementById('eke-saved-hint');
+    if (hint) hint.style.display = 'none';
+  }
+
+  saveBtn.addEventListener('click', () => {
+    const obj = {};
+    Object.keys(FIELD_IDS).forEach((key) => {
+      const el = document.getElementById(FIELD_IDS[key]);
+      obj[key] = el ? el.value.trim() : '';
+    });
+    saveEinkaufEinstellungen(obj);
+    const hint = document.getElementById('eke-saved-hint');
+    if (hint) {
+      hint.style.display = 'block';
+      setTimeout(() => { hint.style.display = 'none'; }, 2500);
+    }
+  });
+
+  const prevOnShowPE4 = window.levelbuildOnShowProjekteinstellungen;
+  window.levelbuildOnShowProjekteinstellungen = function () {
+    if (prevOnShowPE4) prevOnShowPE4();
+    render();
+  };
+
+  render();
+})();
+
+// ======================================================================
+// Projekteinstellungen: Dokumentenordner-Verknüpfung (Datenpfad-Import,
+// siehe Kommentar bei extractDatenpfadRefs/ensureOrdnerZugriff weiter oben
+// in app.js). Only runs on Projekteinstellungen (guarded by #dp-ordner-link).
+// ======================================================================
+(function () {
+  const linkBtn = document.getElementById('dp-ordner-link');
+  if (!linkBtn) return;
+  const unlinkBtn = document.getElementById('dp-ordner-unlink');
+  const statusEl = document.getElementById('dp-ordner-status');
+  const hintEl = document.getElementById('dp-ordner-hint');
+
+  function showHint(text) {
+    if (!hintEl) return;
+    hintEl.textContent = text;
+    hintEl.style.display = text ? 'block' : 'none';
+  }
+
+  async function refreshStatus() {
+    if (!window.showDirectoryPicker) {
+      if (statusEl) statusEl.textContent = 'Nicht unterstützt';
+      linkBtn.disabled = true;
+      if (unlinkBtn) unlinkBtn.style.display = 'none';
+      showHint('Dieser Browser unterstützt das Verknüpfen eines lokalen Ordners nicht (nur Chrome/Edge u. ä.).');
+      return;
+    }
+    let name = null;
+    try { name = await getVerknuepfterOrdnerName(); } catch (e) { name = null; }
+    if (name) {
+      if (statusEl) statusEl.textContent = name;
+      if (unlinkBtn) unlinkBtn.style.display = '';
+      linkBtn.textContent = 'Anderen Ordner verknüpfen';
+      showHint('');
+    } else {
+      if (statusEl) statusEl.textContent = 'Noch kein Ordner verknüpft';
+      if (unlinkBtn) unlinkBtn.style.display = 'none';
+      linkBtn.textContent = 'Ordner verknüpfen';
+      showHint('');
+    }
+  }
+
+  linkBtn.addEventListener('click', () => {
+    // Direkter Klick-Handler = gültige Nutzer-Geste für showDirectoryPicker().
+    ensureOrdnerZugriff(true).then((res) => {
+      if (res.ok) { refreshStatus(); return; }
+      if (res.reason !== 'cancelled') showHint('Ordner konnte nicht verknüpft werden.');
+    });
+  });
+  if (unlinkBtn) {
+    unlinkBtn.addEventListener('click', () => {
+      if (!confirm('Verknüpfung mit dem Dokumentenordner entfernen? Bereits eingelesene Dokumente bleiben erhalten, künftige Datenpfad-Importe müssen den Ordner erneut verknüpfen.')) return;
+      trenneOrdner().then(refreshStatus);
+    });
+  }
+
+  const prevOnShowPE6 = window.levelbuildOnShowProjekteinstellungen;
+  window.levelbuildOnShowProjekteinstellungen = function () {
+    if (prevOnShowPE6) prevOnShowPE6();
+    refreshStatus();
+  };
+
+  refreshStatus();
 })();
 
 // ======================================================================
@@ -1143,6 +2024,17 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
   // im Titel. Reihenfolge = erstes Auftreten über die Listen hinweg. Wird
   // NUR in der Gesamtansicht benutzt - dort ist das Zusammenführen sinnvoll,
   // weil mehrere Listen gleichzeitig gezeigt werden.
+  // Eigenständige Kopie von taskProtokollIds (Tätigkeitslisten-Editor-IIFE,
+  // Zeile ~3307) - jede Seiten-IIFE hat ihren eigenen Scope, siehe
+  // Codebase-Konvention. Liest die einer Tätigkeit zugeordneten Protokoll-
+  // IDs, egal ob als (neueres) Array protokollIds oder (älteres) Einzelfeld
+  // protokollId gespeichert.
+  function taskProtokollIdsFzl(t) {
+    if (!t) return [];
+    if (Array.isArray(t.protokollIds)) return t.protokollIds;
+    if (t.protokollId) return [t.protokollId];
+    return [];
+  }
   function buildTaskColumns(usedLists) {
     const map = new Map();
     usedLists.forEach((l) => {
@@ -1151,7 +2043,10 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
         const key = titel ? ('titel::' + titel.toLowerCase()) : ('solo::' + l.id + '::' + t.id);
         const label = titel || `(ohne Titel) – ${l.name}`;
         if (!map.has(key)) map.set(key, { key, label, entries: [] });
-        map.get(key).entries.push({ listId: l.id, listName: l.name, taskId: t.id });
+        map.get(key).entries.push({
+          listId: l.id, listName: l.name, taskId: t.id, taetigkeitsartId: t.taetigkeitsartId || null,
+          protokollIds: t.dokuArt === 'protokoll' ? taskProtokollIdsFzl(t) : [],
+        });
       });
     });
     return Array.from(map.values());
@@ -1170,8 +2065,52 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
     return (list.tasks || []).map((t) => ({
       key: 'solo1::' + list.id + '::' + t.id,
       label: String(t.titel || '').trim() || '(ohne Titel)',
-      entries: [{ listId: list.id, listName: list.name, taskId: t.id }],
+      entries: [{
+        listId: list.id, listName: list.name, taskId: t.id, taetigkeitsartId: t.taetigkeitsartId || null,
+        protokollIds: t.dokuArt === 'protokoll' ? taskProtokollIdsFzl(t) : [],
+      }],
     }));
+  }
+
+  // Nutzer-Wunsch: "Beit tätigkeiten welche 2 Protokolle zugeordnet haben
+  // muss die ansicht in der Fertigstellungliste auch in 2 Getilt werden...
+  // Das hat nichts mit der / oder so zu tun sodern damit das der Tätigkeit
+  // 2 Protokolle zugeorndet wurden." - eine Tätigkeit mit mehreren
+  // zugeordneten Protokollen (Oder-Auswahl, siehe Handy-App-Redesign) wird
+  // NICHT als eine gemeinsame Spalte gezeigt, sondern als je eine
+  // Unterspalte PRO Protokoll, gruppiert unter dem Tätigkeitsnamen als
+  // gemeinsame Kopfzeile (siehe taskGroupRowHtml). Läuft NACH
+  // buildTaskColumns()/buildSingleListColumns() und VOR buildAllColumns(),
+  // damit Masttafel-Spalten (nie aufgeteilt) unberührt bleiben. Die Union
+  // der Protokoll-IDs wird über ALLE (in der Gesamtansicht ggf. aus
+  // mehreren Listen zusammengeführten) Tätigkeits-Varianten dieser Spalte
+  // gebildet - protokollIds verweisen projektweit auf dieselbe Protokoll-
+  // Kopie (loadProtokollProjectList()), sind also über Listen hinweg direkt
+  // vergleichbar, kein Name-Abgleich nötig.
+  function expandProtokollSplitColumns(taskCols) {
+    const protokolle = (typeof loadProtokollProjectList === 'function') ? loadProtokollProjectList() : [];
+    const protokollName = (id) => { const p = protokolle.find((x) => x.id === id); return p ? p.name : '(gelöschtes Protokoll)'; };
+    const result = [];
+    (taskCols || []).forEach((c) => {
+      const idOrder = [];
+      const idSet = new Set();
+      (c.entries || []).forEach((e) => {
+        (e.protokollIds || []).forEach((pid) => { if (!idSet.has(pid)) { idSet.add(pid); idOrder.push(pid); } });
+      });
+      if (idOrder.length < 2) { result.push(c); return; }
+      idOrder.forEach((pid) => {
+        result.push({
+          key: c.key + '::pr::' + pid,
+          label: protokollName(pid),
+          entries: c.entries,
+          isProtokollSplit: true,
+          protokollId: pid,
+          parentKey: c.key,
+          parentLabel: c.label,
+        });
+      });
+    });
+    return result;
   }
 
   function mtColValue(entry, idx) {
@@ -1194,6 +2133,72 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
   let fzlSortCol = null;
   let fzlSortDir = 'asc';
   let fzlFilters = new Map();
+  // Nutzer-Wunsch: "zwischen diesen Arten unterschieden und einzelne Arten
+  // können in Summe oder Kombination angezeigt werden" - null bedeutet
+  // "Alle Arten" (Standard, keine Einschränkung); ist ein Set gesetzt,
+  // werden nur noch Aufgaben-Spalten gezeigt, die (mindestens) einer der
+  // ausgewählten Arten angehören ("Kombination" mehrerer Arten = mehrere
+  // gleichzeitig ausgewählt). Der Sonderwert '__none__' steht für
+  // Tätigkeiten ohne zugeordnete Art. Betrifft nur Aufgaben-Spalten -
+  // Standort-/Masttafel-Spalten bleiben davon unberührt.
+  let fzlArtFilter = null;
+  function colTaetigkeitsartIds(c) {
+    if (!c || c.isMt) return [];
+    const set = new Set();
+    (c.entries || []).forEach((e) => { if (e.taetigkeitsartId) set.add(e.taetigkeitsartId); });
+    return Array.from(set);
+  }
+  function applyFzlArtFilter(cols) {
+    if (!fzlArtFilter || !fzlArtFilter.size) return cols;
+    return cols.filter((c) => {
+      if (c.isMt) return true;
+      const ids = colTaetigkeitsartIds(c);
+      if (!ids.length) return fzlArtFilter.has('__none__');
+      return ids.some((id) => fzlArtFilter.has(id));
+    });
+  }
+  // Rendert den Art-Umschalter im Panel-Header (gleiches Bedienkonzept wie
+  // renderFzlListSwitcher, aber als Mehrfachauswahl-Checkbox-Menü statt
+  // Einzelauswahl, da mehrere Arten gleichzeitig/"in Kombination" gezeigt
+  // werden können sollen). Blendet sich selbst aus, solange dem Projekt
+  // noch keine einzige Tätigkeitsart zugeordnet ist.
+  function renderFzlArtSwitcher() {
+    const sw = document.querySelector('.fzl-art-switcher');
+    if (!sw) return;
+    const arten = (typeof loadTaetigkeitsartProjectList === 'function') ? loadTaetigkeitsartProjectList() : [];
+    if (!arten.length) { sw.hidden = true; return; }
+    sw.hidden = false;
+    const label = sw.querySelector('.segment-current');
+    if (label) {
+      const n = fzlArtFilter ? fzlArtFilter.size : 0;
+      label.textContent = !n ? 'Alle Arten' : (n === 1 ? (arten.concat([{ id: '__none__', name: 'Ohne Art' }]).find((a) => fzlArtFilter.has(a.id)) || {}).name || 'Alle Arten' : `${n} Arten`);
+    }
+    const menu = sw.querySelector('.segment-menu');
+    if (!menu) return;
+    const items = arten.concat([{ id: '__none__', name: 'Ohne Art', color: '#8a94a6' }]);
+    menu.innerHTML = `<div class="segment-menu-item fzl-art-all${!fzlArtFilter || !fzlArtFilter.size ? ' active' : ''}" data-fzl-art-all>Alle Arten</div>` +
+      items.map((a) => `
+        <label class="segment-menu-item fzl-art-menu-item">
+          <input type="checkbox" data-fzl-art-check="${esc(a.id)}" ${fzlArtFilter && fzlArtFilter.has(a.id) ? 'checked' : ''}>
+          <span class="tl-status-chip" style="--tl-color:${esc(a.color || '#8a94a6')}">${esc(a.name)}</span>
+        </label>`).join('');
+    const allItem = menu.querySelector('[data-fzl-art-all]');
+    if (allItem) allItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fzlArtFilter = null;
+      render();
+    });
+    menu.querySelectorAll('[data-fzl-art-check]').forEach((cb) => {
+      cb.addEventListener('click', (e) => e.stopPropagation());
+      cb.addEventListener('change', () => {
+        const id = cb.getAttribute('data-fzl-art-check');
+        if (!fzlArtFilter) fzlArtFilter = new Set();
+        if (cb.checked) fzlArtFilter.add(id); else fzlArtFilter.delete(id);
+        if (!fzlArtFilter.size) fzlArtFilter = null;
+        render();
+      });
+    });
+  }
 
   function compareFzlValues(a, b) {
     const na = a == null ? '' : String(a);
@@ -1216,8 +2221,23 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
     }
     const match = c.entries.find((e) => e.listId === assignedListId);
     if (!match) return { display: 'Entfällt', sortKey: 'zzz9-entfaellt' };
+    // Protokoll-Unterspalte (siehe expandProtokollSplitColumns): gehört das
+    // zugeordnete Aufgaben-Exemplar an diesem Standort überhaupt zu diesem
+    // Protokoll, gilt es nicht als "erledigt/offen" für DIESE Unterspalte,
+    // sondern schlicht als "entfällt" (siehe bodyRowsHtml für die exakt
+    // gleiche Logik).
+    if (c.isProtokollSplit && !(match.protokollIds || []).includes(c.protokollId)) {
+      return { display: 'Entfällt', sortKey: 'zzz9-entfaellt' };
+    }
     const done = mastAbschluss[match.taskId];
-    if (done && done.datum) return { display: fmtDatumFzl(done.datum), sortKey: done.datum };
+    if (done && done.datum) {
+      if (c.isProtokollSplit) {
+        const pd = (typeof loadMastProtokollDaten === 'function') ? loadMastProtokollDaten() : {};
+        const filledPid = ((pd[m.mastKey] || {})[match.taskId] || {}).protokollId || null;
+        if (filledPid !== c.protokollId) return { display: 'Entfällt', sortKey: 'zzz9-entfaellt' };
+      }
+      return { display: fmtDatumFzl(done.datum), sortKey: done.datum };
+    }
     return { display: 'Offen', sortKey: 'zzz1-offen' };
   }
   // Wert einer Zelle für Filter-Abgleich/Anzeige: bei Aufgaben-Spalten das
@@ -1235,7 +2255,13 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
     if (c.isMt) return { na: false, val: mtColValue(m.entry, c.idx) };
     const match = c.entries.find((e) => e.listId === assignedListId);
     if (!match) return { na: true, val: '' };
+    if (c.isProtokollSplit && !(match.protokollIds || []).includes(c.protokollId)) return { na: true, val: '' };
     const done = mastAbschluss[match.taskId];
+    if (done && done.datum && c.isProtokollSplit) {
+      const pd = (typeof loadMastProtokollDaten === 'function') ? loadMastProtokollDaten() : {};
+      const filledPid = ((pd[m.mastKey] || {})[match.taskId] || {}).protokollId || null;
+      if (filledPid !== c.protokollId) return { na: true, val: '' };
+    }
     return { na: false, val: (done && done.datum) ? done.datum : '' };
   }
   // Prüft, ob ein Standort nach den aktuell aktiven Spaltenfiltern sichtbar
@@ -1315,6 +2341,7 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
     const usedLists = projectLists.filter((l) => assignedListIds.has(l.id) && (l.tasks || []).length);
 
     renderFzlListSwitcher(usedLists);
+    renderFzlArtSwitcher();
 
     if (!usedLists.length) {
       return { ok: false, message: 'Keinem Standort wurde bisher eine Tätigkeitsliste mit Aufgaben zugeordnet - das lässt sich auf der Mast-Detail-Seite unter „Tätigkeitsliste" einstellen.' };
@@ -1328,16 +2355,20 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
     }
     const isGesamt = activeListId === '__all__';
 
-    const allTaskCols = isGesamt ? buildTaskColumns(usedLists) : buildSingleListColumns(activeList);
+    const rawTaskCols = isGesamt ? buildTaskColumns(usedLists) : buildSingleListColumns(activeList);
+    const allTaskCols = expandProtokollSplitColumns(rawTaskCols);
     const mtCols = (typeof getKnownMasttafelColumns === 'function') ? getKnownMasttafelColumns() : [];
     const allCols = buildAllColumns(allTaskCols, mtCols);
+    const protokollDaten = (typeof loadMastProtokollDaten === 'function') ? loadMastProtokollDaten() : {};
     const config = currentFzlConfig(allCols);
     const hiddenSet = new Set(config.hidden || []);
     const frozenSet = new Set(config.frozen || []);
-    const visibleCols = orderedAllColumns(allCols, config).filter((c) => !hiddenSet.has(c.key));
+    const visibleCols = applyFzlArtFilter(orderedAllColumns(allCols, config).filter((c) => !hiddenSet.has(c.key)));
 
     if (!visibleCols.length) {
-      return { ok: false, message: 'In der aktuellen Ansicht sind keine Spalten ausgewählt - über „Spalten konfigurieren" wieder welche einblenden.' };
+      return { ok: false, message: fzlArtFilter && fzlArtFilter.size
+        ? 'Keine Spalte entspricht der aktuellen Art-Auswahl - über „Alle Arten" oben wieder zurücksetzen.'
+        : 'In der aktuellen Ansicht sind keine Spalten ausgewählt - über „Spalten konfigurieren" wieder welche einblenden.' };
     }
 
     // In der Einzelansicht nur die Standorte zeigen, denen tatsächlich diese
@@ -1383,6 +2414,7 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
     return {
       ok: true, groups, assignments, projectLists, abschluss, usedLists, isGesamt, activeListId, activeList,
       allTaskCols, allCols, config, hiddenSet, frozenSet, visibleCols, effGroups, totalCols, totalMastenSichtbar,
+      protokollDaten,
     };
   }
 
@@ -1399,11 +2431,72 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
   // konfigurieren"-Dialog) - die Standort-Spalte bleibt immer die erste,
   // feste Spalte und bekommt deshalb keinen Griff.
   const FZL_COL_DRAG_HANDLE_HTML = '<span class="fzl-col-drag-handle" draggable="true" title="Ziehen, um die Spalte zu verschieben">⠿</span>';
+  // Die (erste) Tätigkeitsart einer Spalte - bei einer in der Gesamtansicht
+  // zusammengeführten Spalte (mehrere gleichnamige Tätigkeiten aus
+  // verschiedenen Listen) kann das theoretisch uneinheitlich sein; für die
+  // Gruppierungs-Kopfzeile wird dann bewusst nur die erste gefundene Art
+  // gezeigt, statt die Spalte künstlich aufzuteilen.
+  function colArtInfo(c) {
+    const ids = colTaetigkeitsartIds(c);
+    return ids.length ? resolveTaetigkeitsart(ids[0]) : null;
+  }
+  // Nutzer-Wunsch: "Vielleicht eine Zeile davor wo das dann drinne steht so
+  // übergeordnet" - eine zusätzliche, schmale Kopfzeile ÜBER der normalen
+  // Spaltenkopfzeile, die zusammenhängende Aufgaben-Spalten derselben
+  // Tätigkeitsart farblich gruppiert. Bewusst KEIN echtes colspan: sowohl
+  // das Fixieren/Frozen-Offset (updateFzlFrozenOffsets) als auch das Ziehen
+  // einer Spalte per Griff (wireHeaderDrag) rechnen mit genau einer <th> pro
+  // Spalten-Key in JEDER Kopfzeile - eine <th> pro Spalte bleibt daher auch
+  // hier bestehen, nur die Beschriftung erscheint ausschließlich auf der
+  // jeweils ersten Spalte einer zusammenhängenden Gruppe (farbige
+  // Hintergrundfläche + Unterstrich signalisieren den Zusammenhang optisch).
+  function artRowHtml(d) {
+    if (!d.visibleCols.some((c) => colArtInfo(c))) return ''; // keine Spalte hat überhaupt eine Art -> Zeile ganz weglassen
+    let prevArtId = null;
+    let html = '<tr class="fzl-art-row"><th class="fzl-mast-col-head fzl-art-cell" data-fzl-col="__standort__"></th>';
+    d.visibleCols.forEach((c) => {
+      const art = colArtInfo(c);
+      const isFirstOfRun = !art || art.id !== prevArtId;
+      prevArtId = art ? art.id : null;
+      const style = art ? `background:${esc(art.color)}22; box-shadow: inset 0 -2px 0 ${esc(art.color)};` : '';
+      const label = art && isFirstOfRun ? `<span class="fzl-art-row-label" style="color:${esc(art.color)}">${esc(art.name)}</span>` : '';
+      html += `<th class="fzl-task-head fzl-art-cell" data-fzl-col="${escAttrFzl(c.key)}" style="${style}">${label}</th>`;
+    });
+    html += '</tr>';
+    return html;
+  }
+  // Nutzer-Wunsch: "Beit tätigkeiten welche 2 Protokolle zugeordnet haben
+  // muss die ansicht in der Fertigstellungliste auch in 2 Getilt werden...
+  // z.B. ist ... die Tätigkeit Rammen/Bohren ... zwei möglichkeiten" - eine
+  // zusätzliche schmale Kopfzeile ÜBER der normalen Spaltenkopfzeile, die
+  // die (durch expandProtokollSplitColumns) aufgeteilten Protokoll-
+  // Unterspalten wieder optisch unter dem gemeinsamen Tätigkeitsnamen
+  // zusammenfasst (z.B. "Rammen/Bohren" über "Rammen"|"Bohren") - exakt
+  // dasselbe Prinzip wie die Tätigkeitsart-Kopfzeile (artRowHtml) direkt
+  // oberhalb, nur für eine andere Gruppierungsebene; beide Zeilen können
+  // gleichzeitig erscheinen (Art UND Protokoll-Aufteilung). Bewusst KEIN
+  // echtes colspan, aus demselben Grund wie bei artRowHtml (Frozen-Offset/
+  // Spalten-Drag rechnen mit genau einer <th> pro Spalten-Key in jeder
+  // Kopfzeile).
+  function taskGroupRowHtml(d) {
+    if (!d.visibleCols.some((c) => c.isProtokollSplit)) return ''; // keine aufgeteilte Spalte vorhanden -> Zeile ganz weglassen
+    let prevParentKey = null;
+    let html = '<tr class="fzl-taskgroup-row"><th class="fzl-mast-col-head fzl-taskgroup-cell" data-fzl-col="__standort__"></th>';
+    d.visibleCols.forEach((c) => {
+      const isSplit = !!c.isProtokollSplit;
+      const isFirstOfRun = !isSplit || c.parentKey !== prevParentKey;
+      prevParentKey = isSplit ? c.parentKey : null;
+      const label = isSplit && isFirstOfRun ? `<span class="fzl-taskgroup-row-label">${esc(c.parentLabel)}</span>` : '';
+      html += `<th class="fzl-task-head fzl-taskgroup-cell${isSplit ? ' fzl-taskgroup-cell-active' : ''}" data-fzl-col="${escAttrFzl(c.key)}">${label}</th>`;
+    });
+    html += '</tr>';
+    return html;
+  }
   function headRowHtml(d) {
     let html = `<tr class="fzl-head-row"><th class="fzl-mast-col-head${fzlSortCol === '__standort__' ? ' th-sorted' : ''}" data-fzl-col="__standort__">${headerLabelHtml('Standort', '__standort__')}</th>`;
     d.visibleCols.forEach((c) => {
       const cls = 'fzl-task-head' + (c.isMt ? ' fzl-mt-head' : '') + (fzlSortCol === c.key ? ' th-sorted' : '');
-      const tip = c.isMt ? 'Masttafel-Spalte' : ('Aufgabe aus: ' + c.entries.map((e) => e.listName).filter((v, i, arr) => arr.indexOf(v) === i).join(', '));
+      const tip = c.isMt ? 'Masttafel-Spalte' : ((c.isProtokollSplit ? `Protokoll "${c.label}" der Tätigkeit "${c.parentLabel}" – ` : '') + 'Aufgabe aus: ' + c.entries.map((e) => e.listName).filter((v, i, arr) => arr.indexOf(v) === i).join(', '));
       html += `<th class="${cls}" data-fzl-col="${escAttrFzl(c.key)}" title="${esc(tip)}">${FZL_COL_DRAG_HANDLE_HTML}${headerLabelHtml(c.label, c.key)}</th>`;
     });
     html += '</tr>';
@@ -1506,10 +2599,30 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
           const match = c.entries.find((e) => e.listId === assignedListId);
           if (!match) {
             rowHtml += `<td class="fzl-cell fzl-cell-na" data-fzl-col="${escAttrFzl(c.key)}">entfällt</td>`;
+          } else if (c.isProtokollSplit && !(match.protokollIds || []).includes(c.protokollId)) {
+            // Diese Tätigkeits-Variante (in der tatsächlich zugeordneten
+            // Liste) ist diesem Protokoll gar nicht zugeordnet - z.B. wenn
+            // dieselbe Tätigkeit in einer anderen Liste ein anderes
+            // Protokoll-Set hat. Dann gilt für diese Unterspalte "entfällt",
+            // unabhängig vom Erledigt-Status.
+            rowHtml += `<td class="fzl-cell fzl-cell-na" data-fzl-col="${escAttrFzl(c.key)}">entfällt</td>`;
           } else {
             const done = mastAbschluss[match.taskId];
-            if (done && done.datum) {
-              rowHtml += `<td class="fzl-cell fzl-cell-done" data-fzl-col="${escAttrFzl(c.key)}">${esc(fmtDatumFzl(done.datum))}</td>`;
+            // Nutzer-Wunsch: "Das hat nichts mit der / oder so zu tun sodern
+            // damit das der Tätigkeit 2 Protokolle zugeorndet wurden" - bei
+            // einer Protokoll-Unterspalte zeigt NUR die Unterspalte des
+            // tatsächlich ausgefüllten Protokolls das Datum, alle anderen
+            // Unterspalten dieser Tätigkeit zeigen "entfällt" (siehe
+            // Bildvorgabe: Rammen/Bohren -> Rammen=Datum, Bohren=entfällt).
+            let filledPid = null;
+            if (c.isProtokollSplit && done && done.datum) {
+              filledPid = ((d.protokollDaten[m.mastKey] || {})[match.taskId] || {}).protokollId || null;
+            }
+            if (done && done.datum && c.isProtokollSplit && filledPid !== c.protokollId) {
+              rowHtml += `<td class="fzl-cell fzl-cell-na" data-fzl-col="${escAttrFzl(c.key)}">entfällt</td>`;
+            } else if (done && done.datum) {
+              const taskTitelForModal = c.isProtokollSplit ? c.parentLabel : c.label;
+              rowHtml += `<td class="fzl-cell fzl-cell-done" data-fzl-col="${escAttrFzl(c.key)}" data-fzl-mast="${escAttrFzl(m.mastKey)}" data-fzl-task="${escAttrFzl(match.taskId)}" data-fzl-mast-label="${escAttrFzl(m.label)}" data-fzl-task-titel="${escAttrFzl(taskTitelForModal)}" data-fzl-list-name="${escAttrFzl(match.listName)}" title="Klicken für das Ereignis (Details)">${esc(fmtDatumFzl(done.datum))}</td>`;
             } else {
               rowHtml += `<td class="fzl-cell" data-fzl-col="${escAttrFzl(c.key)}"></td>`;
             }
@@ -1520,6 +2633,157 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
     });
     return bodyHtml;
   }
+
+  // ---------- "Ereignis"-Detail: Nutzer-Wunsch: "in der Fertigstellungsliste
+  // muss es die möglichkeit geben auf ein datum drauf zu klicken dann kommt
+  // man in das sogenannte ereignis also alle daten... erstellte dokumente
+  // oder hinterlegte bilder... wer hat die tätigkeit wann abgeschlossen
+  // welcher standort". Ein Klick auf eine grüne Abschluss-Zelle öffnet ein
+  // Modal, das alle für genau dieses eine Paar (Standort, Tätigkeit)
+  // tatsächlich vorhandenen Daten bündelt: das Bautagebuch-Ereignis (siehe
+  // pushEreignisFuerHeute), die Protokoll-Antworten (falls die Tätigkeit per
+  // Protokoll dokumentiert wird), daraus erzeugte PDF-Dokumente (dort - und
+  // NUR dort - ist "wer" als Ersteller/Datenerfasser bekannt) sowie die für
+  // den Standort hinterlegten Fotos. Bewusst ehrlich: wo Daten schlicht
+  // nicht existieren (z.B. "wer", solange nie ein PDF erzeugt wurde), wird
+  // das klar als "nicht erfasst" angezeigt statt etwas zu erfinden. Fotos
+  // sind im Datenmodell nur je Standort (nicht je Tätigkeit) gespeichert
+  // (siehe loadMastFotos) und werden entsprechend gekennzeichnet. ----------
+  function fzlFormatBausteinValue(b, val) {
+    if (!b) return null;
+    if (b.type === 'checkbox') return val === true ? 'Ja' : (val === false ? 'Nein' : null);
+    if (b.type === 'auswahl' && b.mehrfachauswahl) {
+      const arr = Array.isArray(val) ? val.filter(Boolean) : [];
+      return arr.length ? esc(arr.join(', ')) : null;
+    }
+    if (b.type === 'unterschrift') {
+      return val ? `<img src="${val}" alt="Unterschrift" style="max-width:170px; max-height:64px; border:1px solid var(--gray-200); border-radius:6px; background:#fff;">` : null;
+    }
+    if (b.type === 'foto') {
+      const arr = Array.isArray(val) ? val.filter(Boolean) : (val ? [val] : []);
+      if (!arr.length) return null;
+      return `<div style="display:flex; gap:6px; flex-wrap:wrap;">${arr.map((src) => `<img src="${esc(src)}" style="width:56px; height:56px; object-fit:cover; border-radius:6px; border:1px solid var(--gray-200);">`).join('')}</div>`;
+    }
+    if (b.type === 'tabelle') {
+      if (!Array.isArray(val) || !val.length) return null;
+      const cols = (b.columns && b.columns.length ? b.columns : ['Spalte 1', 'Spalte 2']).slice(0, 3);
+      return `<table style="width:100%; border-collapse:collapse; font-size:11.5px;">
+        <thead><tr>${cols.map((c) => `<th style="text-align:left; border-bottom:1px solid var(--gray-200); padding:3px 6px;">${esc(c)}</th>`).join('')}</tr></thead>
+        <tbody>${val.map((r) => `<tr>${cols.map((c, i) => `<td style="padding:3px 6px; border-bottom:1px solid var(--gray-100);">${esc((r && r[i]) || '')}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>`;
+    }
+    if (val === '' || val == null) return null;
+    return esc(String(val));
+  }
+  function downloadDokumentFzl(doc) {
+    try {
+      const a = document.createElement('a');
+      a.href = doc.pdfBase64;
+      a.download = (doc.betreff || 'Protokoll').replace(/[\\/:*?"<>|]+/g, '_') + '.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) { /* z.B. in Testumgebungen ohne echte Download-Navigation - unkritisch */ }
+  }
+  function openFzlEreignisModal(mastKey, taskId, mastLabel, taskTitel, listName) {
+    if (!mastKey || !taskId) return;
+    const abschluss = (loadMastTaskAbschluss()[mastKey] || {})[taskId] || null;
+    const task = findTaetigkeitById(taskId);
+    const titel = taskTitel || (task ? task.titel : '') || '(ohne Titel)';
+
+    // Bautagebuch-Ereignis(se) zu genau diesem (Standort, Tätigkeit) - kann
+    // theoretisch mehrfach vorkommen (Tätigkeit zurückgesetzt und erneut
+    // abgeschlossen), deshalb als Liste statt Einzelwert.
+    const ereignisse = [];
+    (loadBautagebuecher() || []).forEach((bt) => {
+      (bt.ereignisse || []).forEach((e) => {
+        if (e.mastKey === mastKey && e.taskId === taskId) ereignisse.push(Object.assign({ berichtDatum: bt.datum }, e));
+      });
+    });
+    ereignisse.sort((a, b) => String(a.berichtDatum + (a.uhrzeit || '')).localeCompare(String(b.berichtDatum + (b.uhrzeit || ''))));
+
+    // Protokoll-Antworten, falls diese Tätigkeit per Protokoll dokumentiert wird.
+    const protokollDaten = (loadMastProtokollDaten()[mastKey] || {})[taskId] || null;
+    const protokoll = protokollDaten ? loadProtokollProjectList().find((p) => p.id === protokollDaten.protokollId) : null;
+
+    // Erstellte PDF-Dokumente zu genau dieser Tätigkeit an diesem Mast - die
+    // einzige Stelle, an der "wer" (Ersteller/Datenerfasser) tatsächlich
+    // erfasst ist. Ältere Dokumente ohne taskId (vor der Umstellung auf
+    // taskId-Schlüsselung erzeugt) fallen auf den Vorlagen-Abgleich zurück.
+    const docs = loadDokumente().filter((d) => d.mastKey === mastKey && (d.taskId ? d.taskId === taskId : (protokollDaten && d.protokollId === protokollDaten.protokollId)));
+    const wer = docs.length ? Array.from(new Set(docs.map((d) => d.ersteller || d.datenerfasser).filter(Boolean))).join(', ') : '';
+
+    // Fotos: im aktuellen Datenmodell nur je Standort erfasst, nicht je
+    // Tätigkeit - deshalb klar als "gesamter Standort" gekennzeichnet, statt
+    // fälschlich so zu tun, als gehörten sie zu genau dieser Tätigkeit.
+    const fotos = loadMastFotos()[mastKey] || [];
+
+    const infoRow = (label, value) => `<div class="fzl-evt-row"><div class="fzl-evt-label">${esc(label)}</div><div class="fzl-evt-value">${value}</div></div>`;
+    const emptyHtml = (text) => `<div class="changelog-empty" style="padding:4px 0;">${esc(text)}</div>`;
+
+    let html = '<div class="fzl-evt-modal">';
+    html += '<div class="fzl-evt-section">';
+    html += infoRow('Standort', esc(mastLabel || mastKey || '–'));
+    html += infoRow('Tätigkeit', esc(titel));
+    if (listName) html += infoRow('Tätigkeitsliste', esc(listName));
+    html += infoRow('Abgeschlossen am', abschluss && abschluss.datum ? esc(fmtDatumFzl(abschluss.datum)) : '<span class="changelog-empty" style="padding:0; display:inline-block;">nicht erfasst</span>');
+    html += infoRow('Abgeschlossen von', wer ? esc(wer) : '<span class="changelog-empty" style="padding:0; display:inline-block;">nicht erfasst (nur bekannt, wenn dazu ein PDF-Dokument erstellt wurde)</span>');
+    html += '</div>';
+
+    html += '<div class="fzl-evt-section"><div class="fzl-evt-section-title">Ereignis im Bautagebuch</div>';
+    html += ereignisse.length
+      ? ereignisse.map((e) => `<div class="fzl-evt-ereignis"><div class="fzl-evt-ereignis-head">${esc(fmtDatumFzl(e.berichtDatum))} · ${esc(e.uhrzeit || '')}</div><div>${esc(e.titel || '')}</div>${e.beschreibung ? `<div class="fzl-evt-ereignis-desc">${esc(e.beschreibung)}</div>` : ''}</div>`).join('')
+      : emptyHtml('Kein Bautagebuch-Ereignis zu dieser Tätigkeit gefunden.');
+    html += '</div>';
+
+    html += '<div class="fzl-evt-section"><div class="fzl-evt-section-title">Protokoll-Antworten</div>';
+    if (!protokollDaten || !protokoll) {
+      html += emptyHtml('Für diese Tätigkeit liegen keine Protokoll-Daten vor.');
+    } else {
+      const fieldsHtml = (protokoll.bausteine || [])
+        .filter((b) => b.type !== 'abschnitt')
+        .map((b) => {
+          const v = fzlFormatBausteinValue(b, protokollDaten.answers ? protokollDaten.answers[b.id] : undefined);
+          if (v == null) return '';
+          return `<div class="ds-field"><div class="ds-field-label">${esc(b.label || '')}</div><div class="ds-field-value">${v}</div></div>`;
+        }).join('');
+      html += `<div class="fzl-evt-protokoll-name">${esc(protokoll.name)}</div>` + (fieldsHtml || emptyHtml('Keine ausgefüllten Felder.'));
+    }
+    html += '</div>';
+
+    html += '<div class="fzl-evt-section"><div class="fzl-evt-section-title">Erstellte Dokumente</div>';
+    html += docs.length
+      ? docs.map((d) => `<div class="fzl-evt-doc-row"><span>${esc(d.betreff || 'Dokument')} <span class="changelog-empty" style="padding:0; display:inline;">(${esc(d.ersteller || '–')}${d.datenerfasser ? ' / ' + esc(d.datenerfasser) : ''})</span></span><button type="button" class="link-action" data-fzl-doc-download="${esc(d.id)}">Herunterladen</button></div>`).join('')
+      : emptyHtml('Keine PDF-Dokumente zu dieser Tätigkeit erstellt.');
+    html += '</div>';
+
+    html += '<div class="fzl-evt-section"><div class="fzl-evt-section-title">Fotos am Standort (gesamter Standort, nicht tätigkeitsspezifisch)</div>';
+    html += fotos.length
+      ? `<div class="fzl-evt-fotos">${fotos.map((f) => `<img src="${esc(f.dataUrl)}" alt="${esc(f.name || 'Foto')}" title="${esc(f.name || '')}">`).join('')}</div>`
+      : emptyHtml('Keine Fotos zu diesem Standort hinterlegt.');
+    html += '</div></div>';
+
+    openModalFzl('Ereignis', html, '<button type="button" class="matt-tool-btn" id="fzl-evt-close">Schließen</button>');
+    const closeBtn = document.getElementById('fzl-evt-close');
+    if (closeBtn) closeBtn.addEventListener('click', closeModalFzl);
+    modalBodyFzl.querySelectorAll('[data-fzl-doc-download]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const doc = docs.find((d) => d.id === btn.getAttribute('data-fzl-doc-download'));
+        if (doc) downloadDokumentFzl(doc);
+      });
+    });
+  }
+  // Delegiert (statt bei jedem render()/refreshBody() neu zu verdrahten) -
+  // contentEl selbst bleibt über beide Update-Arten hinweg dasselbe
+  // DOM-Element, nur sein innerHTML wechselt.
+  contentEl.addEventListener('click', (e) => {
+    const cell = e.target && e.target.closest ? e.target.closest('.fzl-cell-done') : null;
+    if (!cell) return;
+    const mastKey = cell.getAttribute('data-fzl-mast');
+    const taskId = cell.getAttribute('data-fzl-task');
+    if (!mastKey || !taskId) return;
+    openFzlEreignisModal(mastKey, taskId, cell.getAttribute('data-fzl-mast-label'), cell.getAttribute('data-fzl-task-titel'), cell.getAttribute('data-fzl-list-name'));
+  });
 
   // Klick irgendwo auf eine Kopfzelle sortiert nach dieser Spalte (Klick
   // wiederholen dreht die Richtung um), Klick auf das Filter-Symbol öffnet
@@ -1724,6 +2988,8 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
       <div class="fzl-table-wrap">
         <table class="fzl-table">
           <thead>
+            ${artRowHtml(d)}
+            ${taskGroupRowHtml(d)}
             ${headRowHtml(d)}
             ${filterRowHtml(d)}
           </thead>
@@ -1764,7 +3030,7 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
     const activeList = activeListId !== '__all__' ? usedLists.find((l) => l.id === activeListId) : null;
     if (activeListId !== '__all__' && !activeList) activeListId = '__all__';
     const isGesamt = activeListId === '__all__';
-    const taskCols = isGesamt ? buildTaskColumns(usedLists) : buildSingleListColumns(activeList);
+    const taskCols = expandProtokollSplitColumns(isGesamt ? buildTaskColumns(usedLists) : buildSingleListColumns(activeList));
     const mtCols = (typeof getKnownMasttafelColumns === 'function') ? getKnownMasttafelColumns() : [];
     const allCols = buildAllColumns(taskCols, mtCols);
     const byKey = new Map(allCols.map((c) => [c.key, c]));
@@ -1787,11 +3053,17 @@ const GENERIC_LV_ARTEN = buildLvHierarchy([
         const hidden = workingHidden.has(key);
         const frozen = workingFrozen.has(key);
         const sub = c.isMt ? 'Masttafel-Spalte' : ('Aufgabe aus: ' + c.entries.map((e) => e.listName).filter((v, idx2, arr) => arr.indexOf(v) === idx2).join(', '));
+        // Bei einer Protokoll-Unterspalte (siehe expandProtokollSplitColumns)
+        // in dieser flachen Liste zusätzlich den Tätigkeitsnamen mit
+        // anzeigen ("Rammen/Bohren – Rammen"), da hier - anders als in der
+        // Tabelle selbst - keine gruppierende Kopfzeile existiert, die das
+        // sonst optisch klarstellen würde.
+        const displayLabel = c.isProtokollSplit ? `${c.parentLabel} – ${c.label}` : c.label;
         return `<div class="col-config-row" data-fzl-row-idx="${i}">
           <span class="col-drag-handle" draggable="true" data-fzl-drag-idx="${i}" title="Ziehen, um die Reihenfolge zu ändern">${DRAG_HANDLE_SVG}</span>
           <label class="col-config-check">
             <input type="checkbox" data-fzl-cfg-visible="${i}" ${hidden ? '' : 'checked'}>
-            ${esc(c.label)}
+            ${esc(displayLabel)}
           </label>
           <label class="col-config-check muted" title="Spalte beim horizontalen Scrollen sichtbar halten">
             <input type="checkbox" data-fzl-cfg-frozen="${i}" ${frozen ? 'checked' : ''}>
@@ -1999,6 +3271,144 @@ function protokolleFor(scope) {
 }
 
 // ======================================================================
+// Tätigkeitenarten: kleiner, fest pflegbarer Stammdatensatz (z. B. "Einkauf",
+// "Lieferung", "Ausführung"), mit dem sich jede Tätigkeit einer Kategorie
+// zuordnen lässt. Nutzer-Wunsch: "im Vorlagenbereich einen Stammdatensatz...
+// anpassbar... werden immer in Kompletheit mit in ein Projekt gezogen wenn
+// die Tätigkeitenliste in das Projekt gezogen wird". Anders als Protokolle
+// (die gezielt einzeln in ein Projekt gezogen werden) gibt es hier bewusst
+// KEINE eigene "in Projekt übernehmen"-Aktion - siehe
+// cascadeTaetigkeitsartenInsProjekt(), die automatisch beim Übernehmen einer
+// Tätigkeitsliste ins Projekt aufgerufen wird (siehe projectAddBtn weiter
+// unten) und dabei die komplette globale Vorlagenliste in die editierbare
+// Projekt-Kopie mergt, ohne bereits dort individuell angepasste Arten
+// anzufassen.
+// ======================================================================
+const TAETIGKEITSART_TEMPLATES_KEY = 'levelbuild_taetigkeitsarten_vorlagen'; // global (Vorlage, kein Projektbezug)
+const TAETIGKEITSART_PROJECT_KEY = 'levelbuild_taetigkeitsarten_projekt'; // pKey-gescoped
+const TAETIGKEITSART_SEEDED_KEY = 'levelbuild_taetigkeitsarten_seeded';
+migrateToProjectScopedKey(TAETIGKEITSART_PROJECT_KEY);
+
+function makeTaetigkeitsartId() {
+  return 'ta-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+// Einmalige Erstbefüllung mit ein paar Beispiel-Arten (aus dem Nutzer-
+// Wunsch übernommen), damit die Funktion beim allerersten Öffnen nicht leer
+// wirkt. Läuft dank TAETIGKEITSART_SEEDED_KEY garantiert nur genau einmal -
+// löscht der Nutzer danach alle Arten wieder, kommen sie nicht erneut.
+function seedTaetigkeitsartTemplatesIfNeeded() {
+  try {
+    if (localStorage.getItem(TAETIGKEITSART_SEEDED_KEY)) return;
+    localStorage.setItem(TAETIGKEITSART_SEEDED_KEY, '1');
+    if (localStorage.getItem(TAETIGKEITSART_TEMPLATES_KEY) != null) return;
+    const defaults = [
+      { id: makeTaetigkeitsartId(), name: 'Einkauf', color: '#8a63d2' },
+      { id: makeTaetigkeitsartId(), name: 'Lieferung', color: '#e08a2c' },
+      { id: makeTaetigkeitsartId(), name: 'Ausführung', color: '#2f6fed' },
+    ];
+    localStorage.setItem(TAETIGKEITSART_TEMPLATES_KEY, JSON.stringify(defaults));
+  } catch (e) { /* ignore */ }
+}
+function loadTaetigkeitsartTemplates() {
+  seedTaetigkeitsartTemplatesIfNeeded();
+  try { return JSON.parse(localStorage.getItem(TAETIGKEITSART_TEMPLATES_KEY) || '[]'); } catch (e) { return []; }
+}
+function saveTaetigkeitsartTemplates(list) {
+  try { localStorage.setItem(TAETIGKEITSART_TEMPLATES_KEY, JSON.stringify(list)); } catch (e) { /* ignore */ }
+}
+function loadTaetigkeitsartProjectList() {
+  try { return JSON.parse(localStorage.getItem(pKey(TAETIGKEITSART_PROJECT_KEY)) || '[]'); } catch (e) { return []; }
+}
+function saveTaetigkeitsartProjectList(list) {
+  try { localStorage.setItem(pKey(TAETIGKEITSART_PROJECT_KEY), JSON.stringify(list)); } catch (e) { /* ignore */ }
+}
+// Ergänzt die Projekt-Kopie um alle globalen Vorlagen-Arten, die dort noch
+// fehlen (erkannt über sourceTemplateId) - lässt bereits im Projekt
+// vorhandene (ggf. umbenannte) Arten unangetastet. Wird beim Übernehmen
+// einer Tätigkeitsliste ins Projekt aufgerufen, damit die Arten "immer in
+// Kompletheit" mitkommen, ohne dass der Nutzer sie separat zuordnen muss.
+function cascadeTaetigkeitsartenInsProjekt() {
+  const templates = loadTaetigkeitsartTemplates();
+  if (!templates.length) return;
+  const projectList = loadTaetigkeitsartProjectList();
+  const existingSourceIds = new Set(projectList.map((a) => a.sourceTemplateId).filter(Boolean));
+  let changed = false;
+  templates.forEach((tpl) => {
+    if (existingSourceIds.has(tpl.id)) return;
+    projectList.push({ id: makeTaetigkeitsartId(), name: tpl.name, color: tpl.color, sourceTemplateId: tpl.id });
+    changed = true;
+  });
+  if (changed) saveTaetigkeitsartProjectList(projectList);
+}
+// Ergänzt die Projekt-Protokoll-Liste um alle Vorlagen-Protokolle, die von
+// den Tätigkeiten einer (gerade ins Projekt gezogenen) Tätigkeitsliste per
+// protokollIds referenziert werden und dort noch fehlen (erkannt über
+// sourceTemplateId, damit ein bereits von einer anderen Liste übernommenes
+// Protokoll nicht doppelt kopiert wird). Nutzer-Wunsch: "wenn eine
+// Tätigkeitenliste in ein Projekt gezogen wird [soll] mit der
+// Tätigkeitenliste auch alle Protokollvorlagen mit in das Projekt gezogen
+// werden" - analog zu cascadeTaetigkeitsartenInsProjekt() oben, nur für
+// Protokolle statt Arten. Gibt { idMap, neuUebernommen } zurück: idMap
+// bildet jede referenzierte Vorlagen-Protokoll-ID auf ihre (neue oder schon
+// vorhandene) Projekt-Kopie-ID ab - damit der Aufrufer die protokollIds der
+// kopierten Tätigkeiten passend umschreiben kann; neuUebernommen listet die
+// Namen der dabei tatsächlich frisch kopierten Protokolle (für die Meldung
+// an den Nutzer - bereits vorhandene Kopien werden dort nicht erneut
+// genannt).
+function cascadeProtokolleInsProjektFuerListe(tpl) {
+  const idMap = {};
+  const neuUebernommen = [];
+  if (!tpl || !Array.isArray(tpl.tasks)) return { idMap, neuUebernommen };
+  const referencedIds = new Set();
+  tpl.tasks.forEach((t) => {
+    (Array.isArray(t.protokollIds) ? t.protokollIds : (t.protokollId ? [t.protokollId] : []))
+      .forEach((pid) => { if (pid) referencedIds.add(pid); });
+  });
+  if (!referencedIds.size) return { idMap, neuUebernommen };
+  const templates = loadProtokollTemplates();
+  const projectList = loadProtokollProjectList();
+  let changed = false;
+  referencedIds.forEach((refId) => {
+    const existing = projectList.find((p) => p.sourceTemplateId === refId);
+    if (existing) { idMap[refId] = existing.id; return; }
+    const tplProtokoll = templates.find((p) => p.id === refId);
+    if (!tplProtokoll) return; // Vorlage zwischenzeitlich gelöscht - nichts zu übernehmen
+    const copy = JSON.parse(JSON.stringify(tplProtokoll));
+    copy.id = makeProtokollId('pr');
+    copy.sourceTemplateId = tplProtokoll.id;
+    copy.sourceTemplateName = tplProtokoll.name;
+    (copy.bausteine || []).forEach((b) => { b.id = makeProtokollId('bs'); });
+    projectList.push(copy);
+    idMap[refId] = copy.id;
+    neuUebernommen.push(tplProtokoll.name);
+    changed = true;
+  });
+  if (changed) saveProtokollProjectList(projectList);
+  return { idMap, neuUebernommen };
+}
+// Liefert die einer Tätigkeit zugeordnete Art (Projekt-gescoped) - oder
+// null, falls (noch) keine gewählt bzw. die Art zwischenzeitlich gelöscht
+// wurde.
+function resolveTaetigkeitsart(taetigkeitsartId) {
+  if (!taetigkeitsartId) return null;
+  return loadTaetigkeitsartProjectList().find((a) => a.id === taetigkeitsartId) || null;
+}
+// Wie protokolleFor(scope): eine Tätigkeit in einer projektunabhängigen
+// Vorlage kann seit dem Nutzer-Feedback "die Tätigkeitenart muss ja aber
+// einer Tätigkeit auch zugeordnet werden können" bereits DORT eine Art
+// bekommen (aus den globalen Vorlagen-Arten) - nicht erst nach dem
+// Übernehmen ins Projekt. Beim Übernehmen wird diese Vorlagen-Art-ID dann
+// über sourceTemplateId auf die passende Projekt-Kopie umgemappt (siehe
+// projectAddBtn-Handler weiter unten), damit sie dort weiterhin stimmt.
+function taetigkeitsartenFor(scope) {
+  return scope === 'project' ? loadTaetigkeitsartProjectList() : loadTaetigkeitsartTemplates();
+}
+function resolveTaetigkeitsartFor(taetigkeitsartId, scope) {
+  if (!taetigkeitsartId) return null;
+  return taetigkeitsartenFor(scope).find((a) => a.id === taetigkeitsartId) || null;
+}
+
+// ======================================================================
 // Mast <-> Handy-App Verknüpfung: welche Tätigkeitsliste einem Mast
 // zugeordnet ist, der Abhaken-Status jeder Aufgabe für diesen einen Mast,
 // die dort eingegebenen Protokoll-Antworten und die dort aufgenommenen
@@ -2050,6 +3460,22 @@ function loadMastTlAssignments() {
 function saveMastTlAssignments(map) {
   try { localStorage.setItem(pKey(MAST_TL_ASSIGNMENT_KEY), JSON.stringify(map)); } catch (e) { /* ignore */ }
 }
+// { [mastKey]: true } - Standorte, deren Tätigkeitslisten-Zuordnung einzeln
+// (Mast-Detail-Dropdown oder Mehrfachauswahl in der Masttafel) manuell
+// gesetzt wurde. Nutzer-Wunsch: "man muss eine Tätigkeitenliste an einem
+// Standort einzeln nur für diesen Standort auch nochmal anpassen können" -
+// applyMastTlRegeln() lässt Standorte mit dieser Markierung unangetastet,
+// damit ein späteres erneutes Anwenden der Regeln eine bewusste
+// Einzel-Anpassung nicht wieder verwirft. Reines Set (Wert immer true),
+// kein Bestandteil der eigentlichen Zuordnung selbst.
+const MAST_TL_MANUAL_KEY = 'levelbuild_mast_taetigkeitsliste_manuell';
+migrateToProjectScopedKey(MAST_TL_MANUAL_KEY);
+function loadMastTlManuell() {
+  try { return JSON.parse(localStorage.getItem(pKey(MAST_TL_MANUAL_KEY)) || '{}'); } catch (e) { return {}; }
+}
+function saveMastTlManuell(map) {
+  try { localStorage.setItem(pKey(MAST_TL_MANUAL_KEY), JSON.stringify(map)); } catch (e) { /* ignore */ }
+}
 // { [mastKey]: { [taskId]: statusOptionId } }
 function loadMastTaskStatus() {
   try { return JSON.parse(localStorage.getItem(pKey(MAST_TASK_STATUS_KEY)) || '{}'); } catch (e) { return {}; }
@@ -2082,6 +3508,212 @@ function saveMastFotos(map) {
 }
 function makeMastDataId(prefix) {
   return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// ======================================================================
+// Automatische Zuordnung von Tätigkeitslisten zu Standorten per Regeln
+// ("wenn Spalte X das und das ist, dann Liste Y"), plus die Grundlage für
+// die Mehrfachauswahl-Zuordnung in der Masttafel. Nutzer-Wunsch: "Es muss
+// also eine Möglichkeit geben mehrere Masten auszuwählen und ihnen eine
+// Tätigkeitenliste zuzuordnen. Zudem muss es die Möglichkeit geben die
+// Tätigkeitenlisten über wenn-dann Bedingugen Automatisch zuzuordnen [...]
+// auch mehrfach bedingungen. Nachträglich lässt sich natürlich immer auch
+// nochmal anpassen." Regeln sind project-scoped, werden in der Reihenfolge
+// ihrer Liste ausgewertet (Priorität = Position, erste passende Regel
+// gewinnt) und schreiben - genau wie die manuelle Zuordnung auf der
+// Mast-Detail-Seite bzw. die neue Mehrfachauswahl in der Masttafel - direkt
+// in MAST_TL_ASSIGNMENT_KEY. Das automatische Zuordnen ist ein einmaliger,
+// vom Nutzer explizit ausgelöster Vorgang ("Regeln jetzt anwenden"), kein
+// laufender Hintergrundprozess - manuelle Anpassungen danach bleiben also
+// so lange bestehen, bis die Regeln erneut angewendet werden.
+// ======================================================================
+const MAST_TL_REGELN_KEY = 'levelbuild_mast_taetigkeitsliste_regeln';
+migrateToProjectScopedKey(MAST_TL_REGELN_KEY);
+function loadMastTlRegeln() {
+  try { return JSON.parse(localStorage.getItem(pKey(MAST_TL_REGELN_KEY)) || '[]'); } catch (e) { return []; }
+}
+function saveMastTlRegeln(list) {
+  try { localStorage.setItem(pKey(MAST_TL_REGELN_KEY), JSON.stringify(list)); } catch (e) { /* ignore */ }
+}
+function makeRegelId(prefix) {
+  return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+const MAST_TL_REGEL_OPERATOREN = [
+  { value: 'gleich', label: 'ist gleich' },
+  { value: 'ungleich', label: 'ist ungleich' },
+  { value: 'enthaelt', label: 'enthält' },
+  { value: 'nicht_enthaelt', label: 'enthält nicht' },
+  { value: 'nicht_leer', label: 'ist nicht leer' },
+  { value: 'leer', label: 'ist leer' },
+];
+function emptyMastTlRegel(taetigkeitslisteId) {
+  return {
+    id: makeRegelId('regel'),
+    taetigkeitslisteId: taetigkeitslisteId || '',
+    verknuepfung: 'UND',
+    bedingungen: [{ id: makeRegelId('bed'), spalte: '', operator: 'gleich', wert: '' }],
+  };
+}
+// Liefert für jeden im Projekt eingelesenen Mast (über alle Bauabschnitte
+// hinweg) dessen aktuelle Spaltenwerte als {Spaltenlabel: Zellwert}-Objekt,
+// aus der jeweils neuesten Version - Grundlage für das Auswerten der
+// Zuordnungs-Regeln. key ist derselbe normalisierte Schlüssel, den
+// MAST_TL_ASSIGNMENT_KEY und alle anderen Mast-bezogenen Speicher schon
+// verwenden (siehe getMastNummernForBauabschnitt() oben).
+function getMastColumnValuesForRules() {
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(pKey(MASTTAFEL_STATE_KEY)) || 'null'); } catch (e) { saved = null; }
+  const result = [];
+  if (!saved || !saved.sections) return result;
+  Object.keys(saved.sections).forEach((secId) => {
+    const sec = saved.sections[secId];
+    if (!sec || !sec.rowsByKey || !sec.columns) return;
+    sec.rowsByKey.forEach((pair) => {
+      const key = pair[0];
+      const entry = pair[1];
+      if (!entry || !Array.isArray(entry.versions) || !entry.versions.length) return;
+      const latest = entry.versions[entry.versions.length - 1];
+      const values = {};
+      sec.columns.forEach((c) => { values[c.label] = (latest.values || [])[c.idx]; });
+      result.push({ key, displayKey: entry.displayKey, bauabschnittId: secId, values });
+    });
+  });
+  return result;
+}
+
+// ======================================================================
+// Fotos-Sammelseite: führt alle im Projekt tatsächlich vorhandenen Fotos
+// unabhängig von ihrer Quelle zu EINER Liste zusammen. Nutzer-Wunsch:
+// "unter fotos sollen die fotos wie folgt angezeigt werden alle fotos die
+// durch die mastfatel und sonst wie ankommen sollen hier erscheinen".
+// Zwei Quellen im aktuellen Datenmodell tragen echte Fotodateien: (1) die
+// allgemeine Fotos-Ablage eines Standorts (loadMastFotos - in der Handy-App
+// über Mast-Detail &rsaquo; Fotos aufgenommen; "durch die Masttafel", weil
+// jeder Standort aus einer eingelesenen Masttafel stammt) und (2) Foto-
+// Bausteine innerhalb eines ausgefüllten Protokolls (loadMastProtokollDaten -
+// "und sonst wie ankommen"). Bewusst NICHT einbezogen: die Nachweis-Anhänge
+// einer manuellen Bauabweichung (levelbuildAddManualMastVersion) - das sind
+// laut UI-Beschriftung explizit generische Belege ("E-Mail, Statik-PDF,
+// o. ä."), keine Fotos, und würden diese Galerie mit Nicht-Bildern verwässern.
+// Rein lesend - Fotos selbst werden weiterhin nur in der Handy-App
+// aufgenommen/gelöscht.
+// ======================================================================
+function collectAllProjectFotos() {
+  const result = [];
+  const mastLabels = {};
+  (typeof getMastColumnValuesForRules === 'function' ? getMastColumnValuesForRules() : []).forEach((m) => {
+    mastLabels[m.key] = m.displayKey || m.key;
+  });
+  function labelFor(mastKey) { return mastLabels[mastKey] || mastKey; }
+
+  // ---- Quelle 1: Standort-Fotos (Mast-Detail > Fotos in der Handy-App) ----
+  const mastFotos = (typeof loadMastFotos === 'function') ? loadMastFotos() : {};
+  Object.keys(mastFotos).forEach((mastKey) => {
+    (mastFotos[mastKey] || []).forEach((f) => {
+      if (!f || !f.dataUrl) return;
+      result.push({
+        id: 'mf-' + f.id,
+        dataUrl: f.dataUrl,
+        name: f.name || 'Foto',
+        addedAt: f.addedAt || null,
+        mastKey,
+        mastLabel: labelFor(mastKey),
+        quelle: 'standort',
+        quelleLabel: 'Standort-Foto',
+      });
+    });
+  });
+
+  // ---- Quelle 2: Foto-Bausteine innerhalb ausgefüllter Protokolle ----
+  const protokollDaten = (typeof loadMastProtokollDaten === 'function') ? loadMastProtokollDaten() : {};
+  const protokolle = (typeof loadProtokollProjectList === 'function') ? loadProtokollProjectList() : [];
+  const abschluss = (typeof loadMastTaskAbschluss === 'function') ? loadMastTaskAbschluss() : {};
+  Object.keys(protokollDaten).forEach((mastKey) => {
+    const forMast = protokollDaten[mastKey] || {};
+    Object.keys(forMast).forEach((taskId) => {
+      const entry = forMast[taskId] || {};
+      const protokoll = protokolle.find((p) => p.id === entry.protokollId);
+      if (!protokoll || !Array.isArray(protokoll.bausteine)) return;
+      const task = (typeof findTaetigkeitById === 'function') ? findTaetigkeitById(taskId) : null;
+      // Kein eigener Zeitstempel je Baustein-Antwort im Datenmodell - das
+      // Abschlussdatum der Tätigkeit ist die ehrlichste verfügbare Näherung
+      // dafür, wann das Foto entstanden ist (fehlt es, bleibt das Datum
+      // leer statt eines erfundenen Werts).
+      const addedAt = (abschluss[mastKey] && abschluss[mastKey][taskId] && abschluss[mastKey][taskId].datum) || null;
+      protokoll.bausteine.forEach((b) => {
+        if (b.type !== 'foto') return;
+        const val = entry.answers ? entry.answers[b.id] : undefined;
+        const arr = Array.isArray(val) ? val.filter(Boolean) : (val ? [val] : []);
+        arr.forEach((dataUrl, idx) => {
+          result.push({
+            id: 'pf-' + mastKey + '-' + taskId + '-' + b.id + '-' + idx,
+            dataUrl,
+            name: (b.label || 'Foto') + (task && task.titel ? ' - ' + task.titel : ''),
+            addedAt,
+            mastKey,
+            mastLabel: labelFor(mastKey),
+            quelle: 'protokoll',
+            quelleLabel: 'Protokoll-Foto',
+            taskTitel: task ? task.titel : null,
+            protokollName: protokoll.name,
+            bausteinLabel: b.label || null,
+          });
+        });
+      });
+    });
+  });
+
+  return result;
+}
+
+function normalizeRegelWert(v) {
+  return String(v == null ? '' : v).trim().toLowerCase();
+}
+function bedingungMatches(bedingung, values) {
+  const cellVal = normalizeRegelWert(values ? values[bedingung.spalte] : '');
+  const testVal = normalizeRegelWert(bedingung.wert);
+  switch (bedingung.operator) {
+    case 'gleich': return cellVal === testVal;
+    case 'ungleich': return cellVal !== testVal;
+    case 'enthaelt': return testVal !== '' && cellVal.includes(testVal);
+    case 'nicht_enthaelt': return testVal === '' || !cellVal.includes(testVal);
+    case 'leer': return cellVal === '';
+    case 'nicht_leer': return cellVal !== '';
+    default: return false;
+  }
+}
+function regelMatches(regel, values) {
+  if (!regel || !Array.isArray(regel.bedingungen) || !regel.bedingungen.length) return false;
+  const bedingungen = regel.bedingungen.filter((b) => b.spalte);
+  if (!bedingungen.length) return false;
+  return regel.verknuepfung === 'ODER'
+    ? bedingungen.some((b) => bedingungMatches(b, values))
+    : bedingungen.every((b) => bedingungMatches(b, values));
+}
+// Wertet alle Regeln (in ihrer gespeicherten Reihenfolge = Priorität, erste
+// passende Regel je Mast gewinnt) über alle Masten des Projekts aus und
+// schreibt Treffer in MAST_TL_ASSIGNMENT_KEY. Masten, auf die keine Regel
+// zutrifft, bleiben unverändert (weder gelöscht noch überschrieben) - eine
+// zuvor manuell (oder von einer vorherigen Regelanwendung) gesetzte
+// Zuordnung bleibt also bestehen, wenn jetzt keine Regel mehr zutrifft.
+function applyMastTlRegeln() {
+  const regeln = loadMastTlRegeln();
+  const masten = getMastColumnValuesForRules();
+  const assignments = loadMastTlAssignments();
+  const manuell = loadMastTlManuell();
+  let angepasst = 0;
+  let uebersprungen = 0;
+  masten.forEach((m) => {
+    // Standorte, die einzeln (Mast-Detail oder Mehrfachauswahl) manuell
+    // zugeordnet wurden, bleiben von der Regel-Automatik unangetastet.
+    if (manuell[m.key]) { uebersprungen++; return; }
+    const treffer = regeln.find((r) => regelMatches(r, m.values));
+    if (!treffer) return;
+    if (assignments[m.key] !== treffer.taetigkeitslisteId) angepasst++;
+    assignments[m.key] = treffer.taetigkeitslisteId;
+  });
+  saveMastTlAssignments(assignments);
+  return { angepasst, geprueft: masten.length, uebersprungen, regelnAnzahl: regeln.length };
 }
 
 // ======================================================================
@@ -2351,6 +3983,99 @@ function addDokument(doc) {
   return doc;
 }
 
+// ======================================================================
+// Einkauf: eigener Bereich, in dem Material-Positionen angelegt, einem
+// oder mehreren Masten/Standorten (aus der Masttafel) zugeordnet und als
+// "eingekauft" markiert werden können. Projekt-gescoped, analog zu den
+// übrigen *_projekt-Speichern. Ein "Einkaufsbericht" (PDF, siehe
+// downloadEinkaufsberichtPDF in der Einkauf-IIFE weiter unten) listet dann
+// genau die als eingekauft markierten Positionen auf - also das, was
+// tatsächlich bestellt wurde.
+// { id, material, menge, einheit, standorte: string[] (Mastnummern),
+//   notiz, eingekauft: bool, eingekauftAm: iso-Datum|null, createdAt }
+// ======================================================================
+// Fest hinterlegtes Firmen-Briefkopf-Logo (SPITZKE) fuer den Bestellungs-PDF-
+// Kopf - vom Nutzer als Referenzbild bereitgestellt, exakt so im Dokumentkopf
+// zu uebernehmen (siehe downloadBestellungPDF in der Einkauf-IIFE). Als PNG-
+// Data-URL eingebettet, damit kein zusaetzlicher Netzwerk-Request beim PDF-
+// Erstellen noetig ist.
+const EINKAUF_LOGO_BASE64 = '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HuI43rFjx8aNG4vF4tmzZ/fu3YuITz75pO/71Wr18OHDW7ZsWTjm4cOHz507p7V+8MEHReS9995zzZ5vuummnp6et956i5kXL168cePGmZmZAwcODA4O3nPPPUuWLNm+ffvIyIjW+q677urs7GzSaffu3fv379+6deu6deu+kMzzVJX6rZAXIoKe591668ZardLR0bF27drmaXduw47j2O3xzeZoMN8ozf3avP7w4cPbtm2bnJw8d+7c4ODgt7/9bWvtuXPnmt3TrLWHDh165513Lly4EMfx7t2777nnnkwmc/To0SiK3njjjR07dixsaTM1NfXBBx9s3brVGPPxxx97nrdly5Y777zTiaAjR46IyL333vvxxx83Go133323o6Pj/vvvf+GFF8IwnJqaevLJJx9//PG2tjaYzzafnZ3dtWvXN7/5zT179lzrLLKUGClcB2ZEhGxOB4HHzJ7nxXH88ssv/+IXvzhy5IhTRay1R44cqVarC7v9ueJSt9wBwBgzODhYLBaDIBgfH+/t7dVau8bmTV1rYmLi8OHDa9euzeVy9Xq9VCp1dnZu3rz5+PHjvu8//fTTnZ2ds7OzzbubmZnp6elpb2/fuHHj2bNntdYtLS35fP706dMtLS0zMzObN28uFAo9PT1jY2OuRrxcLmcyGacBOomxUCxcuHDhnnvuaW1t7ezsHBkZ+UIqI1Ji/FbgE+3IiFgRALx06VJXV/ejjz565swZa22SJG5FxnHcLB5yzQQcMZzEeOONN5588knXlyCXy+0/sL8yW9m/f3+SJE0ubdu27cEHH8zn89Zaz/Omp6er1eqZM2eiKHKmAhEFQdC8pVwu55rfHDp0qF6vuw+6cOFCR0dHuVzO5XJ79+6tVqvHjx8Pw/DRRx/92c9+9h/+w3/4yle+4nleqVQ6cODAX//1X09OTroTM0RkcnLSHernmJkeTpniGpxABAS2ghBkMnk/k2WRiYnJXbt2TU1NukZmQRAQUW9vb7OPf5IkO3bsmJiYOHfu3FtvvbVkyRLXw0ZEGo0GAGzYsOHSpUuvv/5aLpcvlopu/TUajampqZaWliRJoijKZrNr1qx57bXXWltbM5lM014Pw7BYLLo77OzsvP3225999tnOzs7Ozk7HSdeEipnXr1//8ssvv/nmm+VyOZ/Pb9++/Z577mlpaXnnnXe+973vPf300wCwZ8+eo0ePbty48Zlnnlm5cqXnea7RelPQpcRIcW2GIDLzzOzsMq0BgEjdeuutK1euyOfzSqkoitzp2s2Sa631+vXrz58/PzExsXHjxkKhMDs7G8fxs88+e/HixV27dj344IMPP/wwKHr//fez2ax7V7VazWazP//5z48fPz46Orp8+fL169dv2LBhcHCwWq02bX0nc+a0DqJ77rln69atZ8+edb03oyiamppyB8dkMplvfOMbAPDDH/4wm82OjIzcd999hULh7bffDsPQHQpTLBbjOM7n89///veJ6NixY659m4gUi8UvpLo1JcZvE4gokwlmZmeUUsuXL3/22WfK5VIYhk5pIaIdO3asXr26tbXV+W1bW1tzudzk5KTrbZPL5b72ta9Za3/4wx/ecccdURQd2H9gNmkcP3ny//Qv/sR9RHd393e+8x1jzKuvvjowMBAEwYEDB6ampo4dO/a1r32t6fWK4zibzbq3JEnywQcfhGG4Z8+eP/uzPxORs2fPDgwMZLNZY8zMzMyxY8eGh4d9329paSkWi++88447ti+TyezZs4eZP/jgg29961tE5Ijd0dHxwx/+sFqtHjhw4N577/1CiJHWfP9W+KUMgGYGATMyNpHPF3OZDAJcuDB46dKl/v7+3t7eM2fOLF26dHR0tKOjw9myzhy31g4PDzdVLKeczMzMlMtlY8yxY8eClmK+VOxr7dSION/yg5nHxsbcOdzOoF+3bl0ul3PqzeDg4JIlS5qHZhhjzp49OzU15drUuv6CxWLR2QlJkhw8eLClpWXx4sVa6ziOT5w4kSTJ+vXrfd8/fvy4MaZcLnd3d7v+Os6NNjw8PDw8vGbNmiAIlFJXHNCREiMFzB/LjfP+KfjkOKQrfVefRN9+paGvNPBTpKrUb5dL6lqUAIBfb4NLyZAS47cJTp1o7v0LFYlmdsavNJqzyxfy59PKiTFmYd80WNDrydn9C3NGXFTxikZSzb+6QMoVGSLNBJPmi83bcNcvlHjOGaWUSnvXprjMAWWMmZ2ddWdQLHQBwTWOvftsDcpa61akMaZWq/m+f8WYAOBe9zzPxfjy+bxzAQNAo9FwB4UtHLBWqymlcrkcAExOTjZPIs7lclEUudytIAgQsdFoVKvVlpYWz/MajUa9XkfEXC6XyWSaA1YqlTAM8/m861ebJEmj0SgUCgsDJtcT6TnfN6RVIbxv39433ngzDKNisVQo5F20rpnZYYxxIsUF5prbarOXJszHwpl5fHz8v/7X/7pq1Spr7Q9+8IM4jnfu3NnX1+f7fjNvr16v//jHP87lcp2dna+88srIyMh7773X29tbKBQGBwddeCGXyznRkSTJ888/f/bs2Z07dxaLxVKpdOTIkTNnzuzcuTOKovb29v/yX/5LtVp9/fXXb7vttqGhoWeeeSaKovfff3/jxo2vv/76xx9/bIzJZDKlUqlJvJdffvnChQsHDx5ctWoVM//7f//vx8fHjx49un79ekiPGkuxULFZtWrVgw8+uGhRt8vjOHnyZBiG7pgiRKxUKjMzM9baZnihiSiKmtxwzlCttbV2bGxs6dKl999//0033bR///6mCsTMu3bt6u7udjka1Wr10Ucf/frXv75z504RqdVqLjSxcPzp6emnnnrq29/+9t69e5VSW7ZseeSRR/r7+3t6ei5evPjQQw994xvfuOOOO06cOFGv12+55ZaHH364XC7XajUAePTRR+++++7e3t7mgL7vf/Ob33z66acbjUalUjl58uTjjz/+ne98BxHdW64/UmLcoGg06qOjI9PT08aYRqMxODhYr9ffeOMNAHj11VdHRka2bdtWqVQmJyeHhoacrHDywVr70UcfNY+xGxwcbG1t7e/vd3qRU8N835+YmGgaMxcvXhwdHe3q6nJMKxaLLu9jdHQUEdeuXbtkyZKFQslaG8exY0ulUnGv1+v1EydOdHR0uD+JiLvzcrl86tSpAwcOjI6OOr1o27Zt77zzjlvxzdi208Tc9ZVKxQm0jo4Od/ZASowUc8tPa+/YseOvv/762bPngiDYsGFDNps9d+6ciDz44IPPP/88M3d1dXV1dbkTIt2SNcZYawcHB90Rjy6GcMcddzhlqaen58CBA7/85S/37t3b1E+MMR999NH69evz+Twzu3X87LPPvvTSS85CcLrTwlKNXC5XLBafeeaZ999/3/M896fTp08PDAyUy+Xe3t6f//znr7/++v79+7XW7oL9+/e3t7d7nnf77bc//PDDLgAfx/GePXvGxsbcyIcPHx4YGHDHMrmYRnPw1PhOMbf4EtO49767HnrwUWE5euzo66+/ft999zmbWyk1PT29efNmt4sv9BS99dZbExMTJ0+e/OEPf9jb23v33XfHcbx///4zZ84s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';
+
+const EINKAUF_KEY = 'levelbuild_einkauf_positionen';
+migrateToProjectScopedKey(EINKAUF_KEY);
+function loadEinkaufPositionen() {
+  try { return JSON.parse(localStorage.getItem(pKey(EINKAUF_KEY)) || '[]'); } catch (e) { return []; }
+}
+function saveEinkaufPositionen(list) {
+  try { localStorage.setItem(pKey(EINKAUF_KEY), JSON.stringify(list)); } catch (e) { /* ignore */ }
+}
+function makeEinkaufId() {
+  return 'ek-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// ======================================================================
+// Lieferanten: einfache, projektübergreifende Stammdaten-Verwaltung (wie
+// die Tätigkeitenarten-Vorlagen) - im Vorlagenbereich gepflegt, bei jeder
+// Bestellung aus einer Liste auswählbar. Bewusst NICHT projekt-gescoped,
+// da ein Lieferant typischerweise über mehrere Projekte hinweg genutzt
+// wird. Eine Bestellung speichert die Lieferanten-Felder als eigenen,
+// unabhängig editierbaren Schnappschuss (siehe BESTELLUNGEN_KEY unten) -
+// eine spätere Änderung am Stammdatensatz wirkt sich also nicht rückwirkend
+// auf bereits erstellte Bestellungen aus.
+// { id, name, strasse, plzOrt, kontaktName, kontaktTelefon, kontaktEmail }
+// ======================================================================
+const LIEFERANTEN_KEY = 'levelbuild_lieferanten';
+function loadLieferanten() {
+  try { return JSON.parse(localStorage.getItem(LIEFERANTEN_KEY) || '[]'); } catch (e) { return []; }
+}
+function saveLieferanten(list) {
+  try { localStorage.setItem(LIEFERANTEN_KEY, JSON.stringify(list)); } catch (e) { /* ignore */ }
+}
+function makeLieferantId() {
+  return 'lf-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// ======================================================================
+// Einkauf-Einstellungen: projekt-gescoped hinterlegte Vorbelegung für neue
+// Bestellungen (Kostenstelle, Bauvorhaben, Einkäufer, Lieferanschrift) -
+// wird in Projekteinstellungen gepflegt und beim Öffnen des Bestellung-
+// Modals als Startwert übernommen, bleibt dort aber pro Bestellung
+// überschreibbar (siehe openBestellungModal in der Einkauf-IIFE).
+// ======================================================================
+const EINKAUF_EINSTELLUNGEN_KEY = 'levelbuild_einkauf_einstellungen';
+migrateToProjectScopedKey(EINKAUF_EINSTELLUNGEN_KEY);
+function loadEinkaufEinstellungen() {
+  let obj;
+  try { obj = JSON.parse(localStorage.getItem(pKey(EINKAUF_EINSTELLUNGEN_KEY)) || 'null'); } catch (e) { obj = null; }
+  return Object.assign({
+    kostenstelle: '', bauvorhaben: '',
+    einkaeuferName: '', einkaeuferTelefon: '', einkaeuferEmail: '',
+    lieferanschriftFirma: '', lieferanschriftZusatz: '', lieferanschriftStrasse: '', lieferanschriftPlzOrt: '',
+  }, obj || {});
+}
+function saveEinkaufEinstellungen(obj) {
+  try { localStorage.setItem(pKey(EINKAUF_EINSTELLUNGEN_KEY), JSON.stringify(obj)); } catch (e) { /* ignore */ }
+}
+
+// ======================================================================
+// Bestellungen: eine Bestellung bündelt eine oder mehrere Einkaufs-
+// positionen (inkl. deren Standorte) zu einem einzigen Bestell-PDF im
+// Spitzke-Layout (siehe downloadBestellungPDF). Projekt-gescoped. Sobald
+// Positionen einer Bestellung zugeordnet werden, gelten sie als
+// eingekauft (siehe EINKAUF_KEY: eingekauft/eingekauftAm/bestellungId).
+// ======================================================================
+const BESTELLUNGEN_KEY = 'levelbuild_bestellungen';
+migrateToProjectScopedKey(BESTELLUNGEN_KEY);
+function loadBestellungen() {
+  try { return JSON.parse(localStorage.getItem(pKey(BESTELLUNGEN_KEY)) || '[]'); } catch (e) { return []; }
+}
+function saveBestellungen(list) {
+  try { localStorage.setItem(pKey(BESTELLUNGEN_KEY), JSON.stringify(list)); } catch (e) { /* ignore */ }
+}
+function makeBestellungId() {
+  return 'best-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
 // Feste Auswahllisten für die Personaleinsatz-Maske (Anwesend). Es gibt in
 // diesem Prototyp noch keine eigene Stammdaten-Verwaltung für Gewerke/
 // Qualifikationen, daher hier als einfache, editierbar erweiterbare Liste
@@ -2522,18 +4247,54 @@ function btRemoveNode(nodes, id) {
   function emptyTask(nr) {
     return {
       id: makeId('tk'), nr: nr, titel: '', fristTage: null, rolle: '',
-      dokuArt: 'keine', protokollId: null, dokuPflichtZumAbhaken: false,
-      web: true, mobile: true, vorgaengerId: null,
+      dokuArt: 'keine', protokollIds: [], dokuPflichtZumAbhaken: false,
+      web: true, mobile: true, vorgaengerId: null, taetigkeitsartId: null,
+      statusOptions: defaultStatusOptions(),
     };
   }
-  // Resolves a task's chosen Protokoll (by id, scoped like the surrounding
-  // list) to its current name - looked up live rather than duplicating the
-  // name onto the task, so a later Protokoll rename is reflected everywhere
-  // it's referenced without needing to touch every Tätigkeit that uses it.
-  function resolveProtokollName(protokollId, scope) {
-    if (!protokollId) return '';
-    const p = protokolleFor(scope).find((x) => x.id === protokollId);
-    return p ? p.name : '(gelöschtes Protokoll)';
+  // Liefert die einer Tätigkeit zugeordneten Protokoll-IDs als Array - einer
+  // Tätigkeit können seit dem Nutzer-Wunsch "auch mehrere Protokolle
+  // zugeordnet werden können" nun mehrere Protokolle zugeordnet sein statt
+  // nur eines. Ältere Tätigkeiten haben noch das alte, einzelne Feld
+  // "protokollId" - das wird hier beim Lesen transparent auf ein
+  // Ein-Element-Array abgebildet, ohne die gespeicherten Daten anzufassen
+  // (die Migration passiert erst beim nächsten Speichern der Tätigkeit im
+  // Bearbeiten-Fenster).
+  function taskProtokollIds(task) {
+    if (!task) return [];
+    if (Array.isArray(task.protokollIds)) return task.protokollIds;
+    if (task.protokollId) return [task.protokollId];
+    return [];
+  }
+  // Statusoptionen (z.B. Nicht erledigt / In Arbeit / Erledigt) gelten seit
+  // dem Nutzer-Feedback "die Statusoption ... auf die einzelnen Tätigkeiten
+  // übertragen, nicht übergeordnet auf die ganze Tätigkeitenliste" pro
+  // Tätigkeit, nicht mehr pro Liste. Bereits vorhandene (ältere) Tätigkeiten
+  // ohne eigene statusOptions fallen für die Anzeige auf die (weiterhin
+  // vorhandenen, aber im UI nicht mehr direkt editierbaren) statusOptions
+  // der Liste zurück, statt sofort schweigend auf den Hart-Default zu
+  // springen - eine bereits vom Nutzer angepasste Liste geht so nicht
+  // verloren, sondern dient nur noch als Ausgangspunkt beim ersten Bearbeiten
+  // der einzelnen Tätigkeit.
+  function taskStatusOptions(task, list) {
+    if (task && Array.isArray(task.statusOptions) && task.statusOptions.length) return task.statusOptions;
+    if (list && Array.isArray(list.statusOptions) && list.statusOptions.length) return list.statusOptions;
+    return defaultStatusOptions();
+  }
+  // Resolves a task's chosen Protokolle (by id, scoped like the surrounding
+  // list) to ihre aktuellen Namen - live nachgeschlagen statt die Namen auf
+  // der Tätigkeit zu duplizieren, damit eine spätere Protokoll-Umbenennung
+  // überall wirkt, ohne jede Tätigkeit anfassen zu müssen. Eine Tätigkeit
+  // kann inzwischen mehreren Protokollen zugeordnet sein (Oder-Verknüpfung -
+  // siehe openTaskModal), daher Array rein/raus statt einer einzelnen ID.
+  function resolveProtokollNames(protokollIds, scope) {
+    const ids = Array.isArray(protokollIds) ? protokollIds : (protokollIds ? [protokollIds] : []);
+    if (!ids.length) return [];
+    const available = protokolleFor(scope);
+    return ids.map((id) => {
+      const p = available.find((x) => x.id === id);
+      return p ? p.name : '(gelöschtes Protokoll)';
+    });
   }
   function storeFor(scope) {
     return scope === 'project'
@@ -2627,20 +4388,70 @@ function btRemoveNode(nodes, id) {
       if (!id) return;
       const tpl = loadTemplates().find((l) => l.id === id);
       if (!tpl) return;
+      // Nutzer-Wunsch: die Tätigkeitenarten (z. B. Einkauf/Lieferung/
+      // Ausführung) werden "immer in Kompletheit mit in ein Projekt
+      // gezogen", sobald hier eine Tätigkeitsliste ins Projekt übernommen
+      // wird - ergänzt fehlende globale Arten in die Projekt-Kopie, ohne
+      // bereits vorhandene (ggf. angepasste) Arten anzufassen. Muss VOR dem
+      // Kopieren der Tätigkeiten laufen, damit unten die Projekt-Pendants
+      // schon existieren, wenn eine in der Vorlage bereits gewählte Art
+      // umgemappt wird.
+      cascadeTaetigkeitsartenInsProjekt();
+      const projectArtenList = loadTaetigkeitsartProjectList();
+      // Nutzer-Wunsch: "wenn eine Tätigkeitenliste in ein Projekt gezogen
+      // wird [soll] mit der Tätigkeitenliste auch alle Protokollvorlagen mit
+      // in das Projekt gezogen werden" - analog zum Tätigkeitenarten-Cascade
+      // oben, muss ebenfalls VOR dem Kopieren der Tätigkeiten laufen, damit
+      // unten protokollIds direkt auf die neuen Projekt-Kopien umgemappt
+      // werden können.
+      const protokollCascade = cascadeProtokolleInsProjektFuerListe(tpl);
       // Deep copy with fresh ids, so editing the project's copy never
       // touches the template - and editing the template later never
       // retroactively changes lists already pulled into a project.
       const copy = JSON.parse(JSON.stringify(tpl));
       copy.id = makeId('tl');
       copy.sourceTemplateName = tpl.name;
-      const statusIdMap = {};
-      copy.statusOptions.forEach((s) => { const oldId = s.id; s.id = makeId('st'); statusIdMap[oldId] = s.id; });
-      copy.tasks.forEach((t) => { t.id = makeId('tk'); t.vorgaengerId = null; });
+      copy.tasks.forEach((t) => {
+        t.id = makeId('tk');
+        t.vorgaengerId = null;
+        // Jede Tätigkeit bekommt beim Übernehmen ins Projekt ihre eigenen,
+        // frisch ge-id-eten Statusoptionen - Quelle ist die Tätigkeit selbst
+        // (falls schon eigene statusOptions vorhanden), sonst die (alte)
+        // Vorlagen-weite Liste als Ausgangspunkt, sonst der Hart-Default.
+        const src = taskStatusOptions(t, copy);
+        t.statusOptions = src.map((s) => ({ id: makeId('st'), label: s.label, color: s.color, icon: s.icon }));
+        // War in der Vorlage bereits eine Tätigkeitsart gewählt, referenziert
+        // t.taetigkeitsartId noch die globale Vorlagen-Art-ID - die ist in
+        // der Projekt-Kopie ungültig (dort gelten die frischen IDs aus dem
+        // Cascade oben). Auf das per sourceTemplateId erkennbare
+        // Projekt-Pendant ummappen, damit die Auswahl erhalten bleibt.
+        if (t.taetigkeitsartId) {
+          const match = projectArtenList.find((a) => a.sourceTemplateId === t.taetigkeitsartId);
+          t.taetigkeitsartId = match ? match.id : null;
+        }
+        // Gleiches Prinzip für die referenzierten Protokolle: die Vorlage
+        // verweist per protokollIds noch auf die globalen Vorlagen-
+        // Protokoll-IDs - über protokollCascade.idMap (oben ermittelt) auf
+        // die frischen Projekt-Kopien umschreiben, sonst würde die Handy-App
+        // (die Protokolle nur projekt-gescoped nachschlägt) das Protokoll
+        // dieser Tätigkeit nicht finden.
+        if (Array.isArray(t.protokollIds) && t.protokollIds.length) {
+          t.protokollIds = t.protokollIds.map((pid) => protokollCascade.idMap[pid]).filter(Boolean);
+        }
+      });
       const projectItems = loadProjectLists();
       projectItems.push(copy);
       saveProjectLists(projectItems);
       if (sel) sel.value = '';
       renderProjectList();
+      // Meldung an den Nutzer: mit der Tätigkeitsliste werden automatisch
+      // auch alle von ihr referenzierten Protokollvorlagen ins Projekt
+      // gezogen - nur die dabei tatsächlich neu kopierten nennen (schon
+      // vorhandene Projekt-Kopien, z. B. von einer zuvor übernommenen
+      // anderen Liste, werden nicht erneut aufgeführt).
+      if (protokollCascade.neuUebernommen.length) {
+        alert('"' + tpl.name + '" wurde ins Projekt übernommen. Mit der Tätigkeitsliste wurden automatisch auch folgende zugehörige Protokollvorlagen mit in das Projekt übernommen:\n\n- ' + protokollCascade.neuUebernommen.join('\n- '));
+      }
     });
   }
 
@@ -2657,6 +4468,24 @@ function btRemoveNode(nodes, id) {
   window.levelbuildOnShowProjekteinstellungen = function () {
     if (prevOnShowPE2) prevOnShowPE2();
     renderProjectList();
+  };
+
+  // Nutzer-Feedback: die Badge-Zähler ("X Tätigkeiten") in diesem Vorlagen-
+  // Panel blieben nach dem Bearbeiten einer Vorlage (z. B. Aufgaben
+  // hinzufügen) auf dem alten Stand stehen, bis die ganze Seite neu geladen
+  // wurde - renderTemplateList()/renderTemplateSelect() liefen bisher nur
+  // EINMAL beim ersten Ausführen dieser IIFE, nicht bei jedem erneuten
+  // Aufruf der "Projekte · Vorlagen"-Seite (die eigentliche Tätigkeitsliste
+  // wird ja über den separaten Editor bearbeitet und man kehrt per
+  // Zurück-Link hierher zurück, ohne dass die Seite neu lädt). Wie die
+  // übrigen onShow-Hooks verkettet (siehe prevOnShowPE2 oben), damit ein
+  // später registrierter Hook (Protokolle-Vorlagen-Bereich) diesen hier
+  // nicht überschreibt, sondern ergänzt.
+  const prevOnShowPV1 = window.levelbuildOnShowProjekteVorlagen;
+  window.levelbuildOnShowProjekteVorlagen = function () {
+    if (prevOnShowPV1) prevOnShowPV1();
+    renderTemplateList();
+    renderTemplateSelect();
   };
 
   // ---------- Tätigkeitsliste editor page ----------
@@ -2697,7 +4526,6 @@ function btRemoveNode(nodes, id) {
     const backLinkEl = document.getElementById('tl-back-link');
     const badgeEl = document.getElementById('tl-scope-badge');
     const hintEl = document.getElementById('tl-scope-hint');
-    const statusListEl = document.getElementById('tl-status-list');
     const tbody = document.getElementById('tl-task-tbody');
     const emptyEl = document.getElementById('tl-task-empty');
     if (!titleEl || !tbody) return;
@@ -2723,7 +4551,6 @@ function btRemoveNode(nodes, id) {
       if (crumbEl) crumbEl.textContent = 'Tätigkeitsliste';
       if (badgeEl) badgeEl.hidden = true;
       if (hintEl) hintEl.textContent = 'Keine Tätigkeitsliste ausgewählt - bitte über Projekte · Vorlagen oder die Projekteinstellungen eines Projekts eine Liste zum Bearbeiten öffnen.';
-      if (statusListEl) statusListEl.innerHTML = '';
       tbody.innerHTML = '';
       if (emptyEl) emptyEl.hidden = false;
       return;
@@ -2741,33 +4568,22 @@ function btRemoveNode(nodes, id) {
         : 'Projektübergreifende Vorlage - Änderungen wirken sich nicht auf bereits in Projekte übernommene Kopien aus.';
     }
 
-    // ---- status options ----
-    if (statusListEl) {
-      statusListEl.innerHTML = list.statusOptions.map((s) => `
-        <span class="tl-status-row">
-          ${fmtStatusChip(s)}
-          <button type="button" class="icon-btn" data-remove-status="${esc(s.id)}" title="Entfernen">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </span>`).join('');
-      statusListEl.querySelectorAll('[data-remove-status]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          list.statusOptions = list.statusOptions.filter((s) => s.id !== btn.getAttribute('data-remove-status'));
-          saveCurrentList(list);
-          renderEditor();
-        });
-      });
-    }
+    // Statusoptionen werden nicht mehr übergeordnet für die ganze Liste
+    // gepflegt, sondern pro Tätigkeit im "Tätigkeit bearbeiten"-Fenster
+    // (siehe openTaskModal weiter unten) - hier gibt es dafür bewusst keinen
+    // Panel-Block mehr.
 
     // ---- tasks table ----
     if (emptyEl) emptyEl.hidden = list.tasks.length > 0;
     tbody.innerHTML = list.tasks.map((t) => {
       const vorgaenger = t.vorgaengerId ? list.tasks.find((x) => x.id === t.vorgaengerId) : null;
-      const protokollName = t.dokuArt === 'protokoll' ? resolveProtokollName(t.protokollId, currentScope) : '';
-      const doku = t.dokuArt === 'foto' ? 'Foto' : (t.dokuArt === 'protokoll' ? ('Protokoll' + (protokollName ? ' (' + esc(protokollName) + ')' : '')) : '–');
+      const protokollNames = t.dokuArt === 'protokoll' ? resolveProtokollNames(taskProtokollIds(t), currentScope) : [];
+      const doku = t.dokuArt === 'foto' ? 'Foto' : (t.dokuArt === 'protokoll' ? ('Protokoll' + (protokollNames.length ? ' (' + esc(protokollNames.join(', ')) + ')' : '')) : '–');
+      const art = resolveTaetigkeitsartFor(t.taetigkeitsartId, currentScope);
       return `<tr>
         <td>${esc(t.nr)}</td>
         <td>${t.titel ? esc(t.titel) : '<span class="stat-value empty">–</span>'}</td>
+        <td>${art ? `<span class="tl-status-chip" style="--tl-color:${esc(art.color)}">${esc(art.name)}</span>` : '–'}</td>
         <td>${t.fristTage != null && t.fristTage !== '' ? esc(t.fristTage) + ' Tage' : '–'}</td>
         <td>${t.rolle ? esc(t.rolle) : '–'}</td>
         <td>${doku}${t.dokuArt !== 'keine' && t.dokuPflichtZumAbhaken ? ' <span class="badge-mini">Pflicht</span>' : ''}</td>
@@ -2798,24 +4614,6 @@ function btRemoveNode(nodes, id) {
         saveCurrentList(list);
         renderEditor();
       });
-    });
-  }
-
-  const statusAddBtn = document.getElementById('tl-status-add');
-  if (statusAddBtn) {
-    statusAddBtn.addEventListener('click', () => {
-      const list = findCurrentList();
-      if (!list) return;
-      const labelEl = document.getElementById('tl-status-new-label');
-      const colorEl = document.getElementById('tl-status-new-color');
-      const iconEl = document.getElementById('tl-status-new-icon');
-      const label = labelEl ? labelEl.value.trim() : '';
-      if (!label) return;
-      list.statusOptions.push({ id: makeId('st'), label, color: colorEl ? colorEl.value : '#2f6fed', icon: iconEl ? iconEl.value.trim() : '' });
-      saveCurrentList(list);
-      if (labelEl) labelEl.value = '';
-      if (iconEl) iconEl.value = '';
-      renderEditor();
     });
   }
 
@@ -2858,14 +4656,35 @@ function btRemoveNode(nodes, id) {
     if (!modalOverlay) return;
     const task = list.tasks.find((t) => t.id === taskId);
     if (!task) return;
+    // Lokale Arbeitskopie - wird wie alle anderen Felder in diesem Modal
+    // erst beim Klick auf "Speichern" tatsächlich auf die Tätigkeit
+    // übernommen, damit "Abbrechen" nichts vorzeitig verändert. Fällt beim
+    // ersten Öffnen auf die (alten, listenweiten) statusOptions der Liste
+    // zurück, falls diese eine Tätigkeit noch keine eigenen hat.
+    let tkStatusOptions = JSON.parse(JSON.stringify(taskStatusOptions(task, list)));
 
     const predecessorOptions = list.tasks
       .filter((t) => t.id !== task.id)
       .map((t) => `<option value="${esc(t.id)}" ${task.vorgaengerId === t.id ? 'selected' : ''}>${esc(t.nr)} - ${esc(t.titel || '(ohne Titel)')}</option>`)
       .join('');
     const availableProtokolle = protokolleFor(currentScope);
-    const protokollOptions = availableProtokolle
-      .map((p) => `<option value="${esc(p.id)}" ${task.protokollId === p.id ? 'selected' : ''}>${esc(p.name)} (${p.bausteine.length})</option>`)
+    // Lokale Arbeitskopie wie tkStatusOptions oben - erst beim Speichern auf
+    // die Tätigkeit übernommen. Dropdown zum Hinzufügen (wie vorher, nur
+    // jetzt mehrfach nutzbar) + Chips zur Anzeige der bereits gewählten
+    // Protokolle (gleiche Optik wie die Standorte-Chips im Bautagebuch),
+    // statt einer Ankreuz-Liste.
+    let tkProtokollIds = taskProtokollIds(task).slice();
+    // Tätigkeitenarten (z. B. Einkauf/Lieferung/Ausführung) existieren nur
+    // Bereits in einer noch projektunabhängigen Vorlage auswählbar (Nutzer-
+    // Wunsch: "die Tätigkeitenart muss ja aber einer Tätigkeit auch
+    // zugeordnet werden können") - dort aus den globalen Vorlagen-Arten,
+    // in einem Projekt aus dessen (per cascadeTaetigkeitsartenInsProjekt()
+    // automatisch übernommener) Projekt-Kopie. Beim späteren Übernehmen
+    // dieser Liste ins Projekt wird eine hier schon gewählte Art auf ihr
+    // Projekt-Pendant umgemappt, siehe projectAddBtn-Handler.
+    const availableArten = taetigkeitsartenFor(currentScope);
+    const artOptionsHtml = availableArten
+      .map((a) => `<option value="${esc(a.id)}" ${task.taetigkeitsartId === a.id ? 'selected' : ''}>${esc(a.name)}</option>`)
       .join('');
 
     modalTitle.textContent = 'Tätigkeit bearbeiten';
@@ -2890,6 +4709,18 @@ function btRemoveNode(nodes, id) {
           <div class="input-wrap"><input type="text" id="tk-rolle" value="${esc(task.rolle)}" placeholder="z. B. Bauleiter"></div>
         </div>
       </div>
+      <div class="field">
+        <label>Art der Tätigkeit</label>
+        <div class="input-wrap">
+          <select id="tk-taetigkeitsart">
+            <option value="">– Keine Art –</option>
+            ${artOptionsHtml}
+          </select>
+          <span class="chev-select"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>
+        </div>
+        ${availableArten.length === 0 ? `<div style="font-size:11px; color:var(--gray-500); margin-top:4px;">Noch keine Tätigkeitenarten ${currentScope === 'project' ? 'diesem Projekt zugeordnet' : 'angelegt'} - siehe Projekte &rsaquo; Vorlagen &rsaquo; Tätigkeitenarten.</div>` : ''}
+        <div style="font-size:11px; color:var(--gray-500); margin-top:4px;">Dient der Gruppierung/Filterung in der Fertigstellungsliste - z. B. um dort nur "Einkauf" oder nur "Ausführung" (oder eine Kombination) anzuzeigen.</div>
+      </div>
       <div class="hr"></div>
       <div class="field">
         <label class="muted">Dokumentation</label>
@@ -2903,15 +4734,16 @@ function btRemoveNode(nodes, id) {
         </div>
       </div>
       <div class="field" id="tk-protokoll-typ-wrap" ${task.dokuArt === 'protokoll' ? '' : 'hidden'}>
-        <label>Welches Protokoll?</label>
+        <label>Welche Protokolle?</label>
+        <div id="tk-protokoll-chips" class="lm-standorte-chips"></div>
         <div class="input-wrap">
-          <select id="tk-protokoll-select">
-            <option value="">– Protokoll auswählen –</option>
-            ${protokollOptions}
+          <select id="tk-protokoll-add-select">
+            <option value="">+ Protokoll hinzufügen</option>
           </select>
           <span class="chev-select"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>
         </div>
         ${availableProtokolle.length === 0 ? `<div style="font-size:11px; color:var(--gray-500); margin-top:4px;">Noch kein Protokoll ${currentScope === 'project' ? 'diesem Projekt zugeordnet' : 'angelegt'} - siehe Projekte &rsaquo; Vorlagen${currentScope === 'project' ? ' bzw. die Projekteinstellungen' : ''}.</div>` : ''}
+        <div style="font-size:11px; color:var(--gray-500); margin-top:6px;">Sind mehrere Protokolle zugeordnet, wählt der Nutzer je Standort/Mast beim Öffnen der Tätigkeit in der App eins davon aus - ist eines für diesen einen Mast ausgefüllt, ist das andere nur für diesen Mast gesperrt (Oder-Verknüpfung, gilt nicht für andere Masten).</div>
       </div>
       <label class="toggle-item" style="padding:0; margin-bottom:10px;">
         <span class="toggle-label">Nachweis Pflicht zum Abhaken</span>
@@ -2927,6 +4759,27 @@ function btRemoveNode(nodes, id) {
           <span class="toggle-label">Für mobile Nutzer anzeigen</span>
           <div class="switch${task.mobile ? ' on' : ''}" id="tk-mobile-switch"><div class="knob"></div></div>
         </label>
+      </div>
+      <div class="hr"></div>
+      <div class="field">
+        <label class="muted">Statusoptionen (nur für diese Tätigkeit)</label>
+        <div style="font-size:11px; color:var(--gray-500); margin:-2px 0 8px;">Gilt nur für diese eine Tätigkeit - z. B. Nicht erledigt / In Arbeit / Erledigt, mit eigener Farbe und Symbol.</div>
+        <div id="tk-status-list" class="tl-status-list"></div>
+        <div class="field-row" style="align-items:flex-end; margin-top:8px;">
+          <div class="field">
+            <label>Bezeichnung</label>
+            <div class="input-wrap"><input type="text" id="tk-status-new-label" placeholder="z. B. In Arbeit"></div>
+          </div>
+          <div class="field" style="max-width:70px;">
+            <label>Farbe</label>
+            <div class="input-wrap"><input type="color" id="tk-status-new-color" value="#2f6fed" style="padding:2px; height:34px;"></div>
+          </div>
+          <div class="field" style="max-width:70px;">
+            <label>Symbol</label>
+            <div class="input-wrap"><input type="text" id="tk-status-new-icon" maxlength="2" placeholder="✓"></div>
+          </div>
+          <button type="button" class="matt-tool-btn" id="tk-status-add" style="height:34px;">Hinzufügen</button>
+        </div>
       </div>
       <div class="hr"></div>
       <div class="field">
@@ -2959,6 +4812,75 @@ function btRemoveNode(nodes, id) {
       if (el) el.addEventListener('click', () => el.classList.toggle('on'));
     });
 
+    // Chips zeigen die bereits zugeordneten Protokolle (Optik wie die
+    // Standorte-Chips im Bautagebuch); das Dropdown darunter bietet nur noch
+    // die NICHT bereits zugeordneten Protokolle an und fügt beim Auswählen
+    // einen weiteren Chip hinzu - so bleibt die vertraute Dropdown-Bedienung
+    // erhalten, erlaubt aber jetzt mehrere statt nur einer Auswahl.
+    function renderTkProtokollUI() {
+      const chipsEl = document.getElementById('tk-protokoll-chips');
+      const selectEl = document.getElementById('tk-protokoll-add-select');
+      if (!chipsEl || !selectEl) return;
+      chipsEl.innerHTML = tkProtokollIds.length
+        ? tkProtokollIds.map((id) => {
+            const p = availableProtokolle.find((x) => x.id === id);
+            const name = p ? p.name : '(gelöschtes Protokoll)';
+            return `<span class="lm-standort-chip">${esc(name)}<button type="button" class="chip-remove" data-remove-tk-protokoll="${esc(id)}" title="Entfernen">×</button></span>`;
+          }).join('')
+        : '<div class="changelog-empty">Noch kein Protokoll zugeordnet.</div>';
+      const remaining = availableProtokolle.filter((p) => tkProtokollIds.indexOf(p.id) === -1);
+      selectEl.innerHTML = `<option value="">+ Protokoll hinzufügen</option>` +
+        remaining.map((p) => `<option value="${esc(p.id)}">${esc(p.name)} (${p.bausteine.length} Feld${p.bausteine.length === 1 ? '' : 'er'})</option>`).join('');
+      chipsEl.querySelectorAll('[data-remove-tk-protokoll]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          tkProtokollIds = tkProtokollIds.filter((id) => id !== btn.getAttribute('data-remove-tk-protokoll'));
+          renderTkProtokollUI();
+        });
+      });
+    }
+    renderTkProtokollUI();
+    const tkProtokollAddSelect = document.getElementById('tk-protokoll-add-select');
+    if (tkProtokollAddSelect) {
+      tkProtokollAddSelect.addEventListener('change', () => {
+        const val = tkProtokollAddSelect.value;
+        if (val && tkProtokollIds.indexOf(val) === -1) tkProtokollIds.push(val);
+        renderTkProtokollUI();
+      });
+    }
+
+    function renderTkStatusList() {
+      const el = document.getElementById('tk-status-list');
+      if (!el) return;
+      el.innerHTML = tkStatusOptions.map((s) => `
+        <span class="tl-status-row">
+          ${fmtStatusChip(s)}
+          <button type="button" class="icon-btn" data-remove-tk-status="${esc(s.id)}" title="Entfernen">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </span>`).join('');
+      el.querySelectorAll('[data-remove-tk-status]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          tkStatusOptions = tkStatusOptions.filter((s) => s.id !== btn.getAttribute('data-remove-tk-status'));
+          renderTkStatusList();
+        });
+      });
+    }
+    renderTkStatusList();
+    const tkStatusAddBtn = document.getElementById('tk-status-add');
+    if (tkStatusAddBtn) {
+      tkStatusAddBtn.addEventListener('click', () => {
+        const labelEl = document.getElementById('tk-status-new-label');
+        const colorEl = document.getElementById('tk-status-new-color');
+        const iconEl = document.getElementById('tk-status-new-icon');
+        const label = labelEl ? labelEl.value.trim() : '';
+        if (!label) return;
+        tkStatusOptions.push({ id: makeId('st'), label, color: colorEl ? colorEl.value : '#2f6fed', icon: iconEl ? iconEl.value.trim() : '' });
+        if (labelEl) labelEl.value = '';
+        if (iconEl) iconEl.value = '';
+        renderTkStatusList();
+      });
+    }
+
     document.getElementById('tk-cancel').addEventListener('click', () => { modalOverlay.hidden = true; });
     document.getElementById('tk-save').addEventListener('click', () => {
       task.nr = document.getElementById('tk-nr').value.trim() || task.nr;
@@ -2966,14 +4888,17 @@ function btRemoveNode(nodes, id) {
       const fristVal = document.getElementById('tk-frist').value;
       task.fristTage = fristVal === '' ? null : parseInt(fristVal, 10);
       task.rolle = document.getElementById('tk-rolle').value.trim();
+      const artSel = document.getElementById('tk-taetigkeitsart');
+      task.taetigkeitsartId = artSel && artSel.value ? artSel.value : null;
       task.dokuArt = document.getElementById('tk-doku-art').value;
-      const protoEl = document.getElementById('tk-protokoll-select');
-      task.protokollId = protoEl && protoEl.value ? protoEl.value : null;
+      task.protokollIds = tkProtokollIds.slice();
+      delete task.protokollId; // altes Einzelauswahl-Feld - Migration auf protokollIds abgeschlossen
       task.dokuPflichtZumAbhaken = document.getElementById('tk-pflicht-switch').classList.contains('on');
       task.web = document.getElementById('tk-web-switch').classList.contains('on');
       task.mobile = document.getElementById('tk-mobile-switch').classList.contains('on');
       const vg = document.getElementById('tk-vorgaenger').value;
       task.vorgaengerId = vg || null;
+      task.statusOptions = tkStatusOptions;
       saveCurrentList(list);
       modalOverlay.hidden = true;
       renderEditor();
@@ -2981,6 +4906,277 @@ function btRemoveNode(nodes, id) {
   }
 
   renderEditor();
+})();
+
+// ======================================================================
+// Automatische Zuordnung: Regeln, die einem Standort anhand seiner
+// Masttafel-Werte automatisch eine Tätigkeitsliste zuweisen (siehe
+// applyMastTlRegeln() etc. weiter oben in app.js für das Datenmodell/die
+// Auswertung). Nutzer-Wunsch: kein eigenes Panel, sondern als Tabelle im
+// selben Panel wie "Tätigkeitslisten in diesem Projekt" (siehe HTML). Nur
+// auf der Projekteinstellungen-Seite (guarded durch #mtr-tbody). Eigenes
+// IIFE-Scope mit eigenem openModal/closeModal-Wrapper, wie im Rest der
+// Datei üblich.
+// ======================================================================
+(function () {
+  const tbody = document.getElementById('mtr-tbody');
+  if (!tbody) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+
+  const modalOverlay = document.getElementById('modal-overlay');
+  const modalTitle = document.getElementById('modal-title');
+  const modalBody = document.getElementById('modal-body');
+  const modalFooter = document.getElementById('modal-footer');
+  function openModal(title, bodyHtml, footerHtml) {
+    if (!modalOverlay) return;
+    modalTitle.textContent = title;
+    modalBody.innerHTML = bodyHtml;
+    modalFooter.innerHTML = footerHtml || '';
+    modalOverlay.hidden = false;
+  }
+  function closeModal() { if (modalOverlay) modalOverlay.hidden = true; }
+
+  function listName(id) {
+    const l = loadTlProjectList().find((x) => x.id === id);
+    return l ? l.name : '(gelöschte Liste)';
+  }
+  function operatorLabel(op) {
+    const o = MAST_TL_REGEL_OPERATOREN.find((x) => x.value === op);
+    return o ? o.label : op;
+  }
+  function bedingungSummary(b) {
+    if (!b.spalte) return '…';
+    return `„${b.spalte}" ${operatorLabel(b.operator)}${(b.operator !== 'leer' && b.operator !== 'nicht_leer') ? ` „${b.wert}"` : ''}`;
+  }
+  function regelSummaryHtml(r) {
+    const bedingungen = (r.bedingungen || []).filter((b) => b.spalte);
+    if (!bedingungen.length) return '<span style="color:var(--gray-500);">Noch keine Bedingung festgelegt.</span>';
+    const verknuepfungLabel = r.verknuepfung === 'ODER' ? ' ODER ' : ' UND ';
+    return 'WENN ' + bedingungen.map((b) => esc(bedingungSummary(b))).join(verknuepfungLabel);
+  }
+
+  function render() {
+    const items = loadMastTlRegeln();
+    const wrapEl = document.getElementById('mtr-wrap');
+    const emptyEl = document.getElementById('mtr-empty');
+    if (!items.length) {
+      if (wrapEl) wrapEl.hidden = true;
+      if (emptyEl) emptyEl.hidden = false;
+      tbody.innerHTML = '';
+      return;
+    }
+    if (wrapEl) wrapEl.hidden = false;
+    if (emptyEl) emptyEl.hidden = true;
+    tbody.innerHTML = items.map((r, i) => `
+      <tr data-regel-id="${esc(r.id)}">
+        <td>
+          <span class="col-move-group">
+            <button type="button" class="col-move-btn" data-move-regel="up" data-regel-idx="${i}" title="Nach oben" ${i === 0 ? 'disabled' : ''}>▲</button>
+            <button type="button" class="col-move-btn" data-move-regel="down" data-regel-idx="${i}" title="Nach unten" ${i === items.length - 1 ? 'disabled' : ''}>▼</button>
+          </span>
+        </td>
+        <td style="font-size:12px; color:var(--gray-600);">${regelSummaryHtml(r)}</td>
+        <td><b>${esc(listName(r.taetigkeitslisteId))}</b></td>
+        <td style="white-space:nowrap;">
+          <button type="button" class="link-action" data-edit-regel="${esc(r.id)}">Bearbeiten</button>
+          <button type="button" class="link-action" data-delete-regel="${esc(r.id)}" style="color:var(--red);">Löschen</button>
+        </td>
+      </tr>`).join('');
+
+    tbody.querySelectorAll('[data-move-regel]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-regel-idx'), 10);
+        const dir = btn.getAttribute('data-move-regel');
+        const list = loadMastTlRegeln();
+        const swapWith = dir === 'up' ? idx - 1 : idx + 1;
+        if (swapWith < 0 || swapWith >= list.length) return;
+        const tmp = list[idx]; list[idx] = list[swapWith]; list[swapWith] = tmp;
+        saveMastTlRegeln(list);
+        render();
+      });
+    });
+    tbody.querySelectorAll('[data-edit-regel]').forEach((btn) => {
+      btn.addEventListener('click', () => openEditor(btn.getAttribute('data-edit-regel')));
+    });
+    tbody.querySelectorAll('[data-delete-regel]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-delete-regel');
+        if (!confirm('Diese Regel wirklich löschen?')) return;
+        saveMastTlRegeln(loadMastTlRegeln().filter((r) => r.id !== id));
+        render();
+      });
+    });
+  }
+
+  // ---------- Bedingungen-Editor innerhalb des Regel-Modals ----------
+  let editingRegel = null; // Arbeitskopie, erst bei "Speichern" persistiert
+
+  function spalteOptionsHtml(selected) {
+    const cols = getKnownMasttafelColumns();
+    if (!cols.length) return `<option value="${esc(selected || '')}">${esc(selected || '(keine Masttafel-Spalten gefunden)')}</option>`;
+    return cols.map((c) => `<option value="${esc(c.label)}"${c.label === selected ? ' selected' : ''}>${esc(c.label)}</option>`).join('');
+  }
+  function operatorOptionsHtml(selected) {
+    return MAST_TL_REGEL_OPERATOREN.map((o) => `<option value="${esc(o.value)}"${o.value === selected ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
+  }
+  function bedingungRowHtml(b, i) {
+    const wertDisabled = (b.operator === 'leer' || b.operator === 'nicht_leer');
+    return `<div class="field-row" data-bedingung-row="${i}" style="align-items:flex-end;">
+      <div class="field" style="flex:1.3;">
+        <label>${i === 0 ? 'Spalte' : ''}</label>
+        <div class="input-wrap"><select data-bedingung-spalte="${i}">${spalteOptionsHtml(b.spalte)}</select></div>
+      </div>
+      <div class="field">
+        <label>${i === 0 ? 'Bedingung' : ''}</label>
+        <div class="input-wrap"><select data-bedingung-operator="${i}">${operatorOptionsHtml(b.operator)}</select></div>
+      </div>
+      <div class="field">
+        <label>${i === 0 ? 'Wert' : ''}</label>
+        <div class="input-wrap"><input type="text" data-bedingung-wert="${i}" value="${esc(b.wert)}" ${wertDisabled ? 'disabled' : ''}></div>
+      </div>
+      <button type="button" class="col-move-btn" data-bedingung-remove="${i}" title="Bedingung entfernen" ${editingRegel.bedingungen.length <= 1 ? 'disabled' : ''}>✕</button>
+    </div>`;
+  }
+  function renderBedingungenList() {
+    const el = document.getElementById('mtr-bedingungen-list');
+    if (!el) return;
+    el.innerHTML = editingRegel.bedingungen.map((b, i) => bedingungRowHtml(b, i)).join('');
+    el.querySelectorAll('[data-bedingung-spalte]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        editingRegel.bedingungen[parseInt(sel.getAttribute('data-bedingung-spalte'), 10)].spalte = sel.value;
+      });
+    });
+    el.querySelectorAll('[data-bedingung-operator]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        editingRegel.bedingungen[parseInt(sel.getAttribute('data-bedingung-operator'), 10)].operator = sel.value;
+        renderBedingungenList();
+      });
+    });
+    el.querySelectorAll('[data-bedingung-wert]').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        editingRegel.bedingungen[parseInt(inp.getAttribute('data-bedingung-wert'), 10)].wert = inp.value;
+      });
+    });
+    el.querySelectorAll('[data-bedingung-remove]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (editingRegel.bedingungen.length <= 1) return;
+        editingRegel.bedingungen.splice(parseInt(btn.getAttribute('data-bedingung-remove'), 10), 1);
+        renderBedingungenList();
+      });
+    });
+  }
+
+  function openEditor(id) {
+    const existing = id ? loadMastTlRegeln().find((r) => r.id === id) : null;
+    editingRegel = existing ? JSON.parse(JSON.stringify(existing)) : emptyMastTlRegel('');
+    if (!editingRegel.bedingungen.length) editingRegel.bedingungen.push({ id: makeRegelId('bed'), spalte: '', operator: 'gleich', wert: '' });
+    // Individuelle Standort-Kopien (siehe individualizeForMast() auf der
+    // Mast-Detail-Seite) sind exklusiv für genau einen Mast gedacht - eine
+    // Automatik-Regel darf nie eine solche Kopie als Ziel haben, sonst
+    // würde sie potenziell mehreren Standorten zugewiesen.
+    const lists = loadTlProjectList().filter((l) => !l.mastKey);
+    const body = `
+      <div class="field">
+        <label>Tätigkeitsliste</label>
+        <div class="input-wrap">
+          <select id="mtr-edit-list">
+            <option value="">Tätigkeitsliste auswählen…</option>
+            ${lists.map((l) => `<option value="${esc(l.id)}"${l.id === editingRegel.taetigkeitslisteId ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="hr"></div>
+      <div class="subheading" style="margin-bottom:0;">Bedingungen</div>
+      <div id="mtr-bedingungen-list"></div>
+      <div style="display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;">
+        <button type="button" class="matt-tool-btn" id="mtr-bedingung-add">+ Bedingung hinzufügen</button>
+        <select id="mtr-verknuepfung" style="margin-left:auto;">
+          <option value="UND"${editingRegel.verknuepfung !== 'ODER' ? ' selected' : ''}>Alle Bedingungen müssen zutreffen (UND)</option>
+          <option value="ODER"${editingRegel.verknuepfung === 'ODER' ? ' selected' : ''}>Mindestens eine Bedingung muss zutreffen (ODER)</option>
+        </select>
+      </div>
+    `;
+    const footer = `
+      <button class="btn-primary" id="mtr-edit-save">Speichern</button>
+      <button class="matt-tool-btn" id="mtr-edit-cancel">Abbrechen</button>
+    `;
+    openModal(existing ? 'Regel bearbeiten' : 'Neue Regel', body, footer);
+    renderBedingungenList();
+    document.getElementById('mtr-bedingung-add').addEventListener('click', () => {
+      editingRegel.bedingungen.push({ id: makeRegelId('bed'), spalte: '', operator: 'gleich', wert: '' });
+      renderBedingungenList();
+    });
+    document.getElementById('mtr-verknuepfung').addEventListener('change', (e) => { editingRegel.verknuepfung = e.target.value; });
+    document.getElementById('mtr-edit-cancel').addEventListener('click', closeModal);
+    document.getElementById('mtr-edit-save').addEventListener('click', () => {
+      const listSel = document.getElementById('mtr-edit-list');
+      editingRegel.taetigkeitslisteId = listSel ? listSel.value : '';
+      if (!editingRegel.taetigkeitslisteId) { alert('Bitte eine Tätigkeitsliste auswählen.'); return; }
+      if (!editingRegel.bedingungen.some((b) => b.spalte)) { alert('Bitte mindestens eine Bedingung mit ausgewählter Spalte festlegen.'); return; }
+      const list = loadMastTlRegeln();
+      const idx = list.findIndex((r) => r.id === editingRegel.id);
+      if (idx >= 0) list[idx] = editingRegel; else list.push(editingRegel);
+      saveMastTlRegeln(list);
+      closeModal();
+      render();
+      // Nutzer-Wunsch: eine "wenn-dann"-Regel soll wirken, sobald sie
+      // gespeichert ist - kein zusätzlicher Klick auf "Regeln jetzt
+      // anwenden" nötig, der leicht übersehen wird (führte dazu, dass eine
+      // gerade erst angelegte Regel scheinbar "nichts tat"). Der separate
+      // Button bleibt trotzdem bestehen, für den Fall, dass später neue
+      // Masttafel-Daten importiert werden, ohne dass sich an den Regeln
+      // selbst etwas ändert.
+      showApplyResult(applyMastTlRegeln());
+    });
+  }
+
+  function showApplyResult(result) {
+    const hint = document.getElementById('mtr-apply-hint');
+    let text;
+    if (result.geprueft === 0) {
+      text = 'Keine Standorte gefunden - zuerst eine Masttafel importieren.';
+    } else {
+      text = `${result.angepasst} von ${result.geprueft} Standort${result.geprueft === 1 ? '' : 'en'} wurde${result.angepasst === 1 ? '' : 'n'} anhand der Regeln (neu) zugeordnet.`;
+      if (result.uebersprungen) {
+        text += ` ${result.uebersprungen} manuell zugeordnete${result.uebersprungen === 1 ? 'r' : ''} Standort${result.uebersprungen === 1 ? '' : 'e'} wurde${result.uebersprungen === 1 ? '' : 'n'} dabei nicht verändert.`;
+      }
+    }
+    if (hint) {
+      hint.textContent = text;
+      hint.style.display = 'block';
+      setTimeout(() => { hint.style.display = 'none'; }, 4000);
+    } else {
+      alert(text);
+    }
+  }
+
+  const addBtn = document.getElementById('mtr-add');
+  if (addBtn) addBtn.addEventListener('click', () => openEditor(null));
+
+  const applyBtn = document.getElementById('mtr-apply');
+  if (applyBtn) {
+    applyBtn.addEventListener('click', () => {
+      const regeln = loadMastTlRegeln();
+      if (!regeln.length) { alert('Es sind noch keine Regeln angelegt.'); return; }
+      showApplyResult(applyMastTlRegeln());
+    });
+  }
+
+  render();
+
+  // Die Regelliste ist project-scoped - beim Wechsel des Projekts muss sie
+  // neu geladen werden, sonst zeigt sie weiter die Regeln des vorher
+  // geöffneten Projekts.
+  const prevOnShowPE5 = window.levelbuildOnShowProjekteinstellungen;
+  window.levelbuildOnShowProjekteinstellungen = function () {
+    if (prevOnShowPE5) prevOnShowPE5();
+    render();
+  };
 })();
 
 // ======================================================================
@@ -3241,7 +5437,15 @@ function btRemoveNode(nodes, id) {
     });
   }
 
+  // Verkettet (nicht überschrieben) - die Tätigkeitslisten-Vorlagen-IIFE
+  // registriert oben bereits denselben Hook für ihr eigenes Panel; würde
+  // hier einfach zugewiesen statt verkettet, ginge deren Badge-Aktualisierung
+  // verloren (genau der Bug, den der Nutzer gemeldet hat: "0 Tätigkeiten"
+  // trotz hinzugefügter Aufgaben, weil das Panel nach dem Bearbeiten nie neu
+  // gerendert wurde).
+  const prevOnShowPV2 = window.levelbuildOnShowProjekteVorlagen;
   window.levelbuildOnShowProjekteVorlagen = function () {
+    if (prevOnShowPV2) prevOnShowPV2();
     renderTemplateList();
     renderTemplateSelect();
   };
@@ -5100,6 +7304,328 @@ function btRemoveNode(nodes, id) {
 })();
 
 // ======================================================================
+// Tätigkeitenarten-Vorlagen: einfache, projektübergreifende Stammdaten-
+// Verwaltung (Name + Farbe) auf der Projekte-Seite unter Vorlagen. Die
+// tatsächliche Projekt-Kopie (inkl. des automatischen "in Kompletheit mit
+// ins Projekt ziehen") lebt in cascadeTaetigkeitsartenInsProjekt() weiter
+// oben (top-level, siehe nahe protokolleFor) - hier geht es nur um die
+// Vorlagen selbst. Nur aktiv, wenn #ta-template-list existiert (Projekte-
+// Seite, Tab "Vorlagen", immer im DOM in der zusammengeführten Shell).
+// ======================================================================
+(function () {
+  const listEl = document.getElementById('ta-template-list');
+  if (!listEl) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+
+  function render() {
+    const items = loadTaetigkeitsartTemplates();
+    listEl.innerHTML = items.length
+      ? items.map((a) => `
+        <div class="col-config-row">
+          <span class="tl-status-chip" style="--tl-color:${esc(a.color)}">${esc(a.name)}</span>
+          <button type="button" class="link-action" data-delete-ta="${esc(a.id)}" style="color:var(--red);">Löschen</button>
+        </div>`).join('')
+      : '<div class="changelog-empty">Noch keine Tätigkeitenarten angelegt.</div>';
+    listEl.querySelectorAll('[data-delete-ta]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-delete-ta');
+        if (!confirm('Diese Art wirklich löschen? Bereits in Projekte übernommene Kopien bleiben davon unberührt.')) return;
+        saveTaetigkeitsartTemplates(loadTaetigkeitsartTemplates().filter((a) => a.id !== id));
+        render();
+      });
+    });
+  }
+
+  const addBtn = document.getElementById('ta-template-add');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      const nameEl = document.getElementById('ta-template-new-name');
+      const colorEl = document.getElementById('ta-template-new-color');
+      const name = nameEl ? nameEl.value.trim() : '';
+      if (!name) return;
+      const items = loadTaetigkeitsartTemplates();
+      items.push({ id: makeTaetigkeitsartId(), name, color: colorEl ? colorEl.value : '#2f6fed' });
+      saveTaetigkeitsartTemplates(items);
+      if (nameEl) nameEl.value = '';
+      render();
+    });
+  }
+
+  render();
+})();
+
+// ======================================================================
+// Lieferanten-Stammdaten: einfache, projektübergreifende Verwaltung (wie
+// die Tätigkeitenarten-Vorlagen oben) auf der Projekte-Seite unter
+// Vorlagen - bei jeder Bestellung im Bereich Einkauf auswählbar (siehe
+// openBestellungModal in der Einkauf-IIFE weiter unten). Nur aktiv, wenn
+// #lf-template-list existiert.
+// ======================================================================
+(function () {
+  const listEl = document.getElementById('lf-template-list');
+  if (!listEl) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+
+  const modalOverlay = document.getElementById('modal-overlay');
+  const modalTitle = document.getElementById('modal-title');
+  const modalBody = document.getElementById('modal-body');
+  const modalFooter = document.getElementById('modal-footer');
+  function openModal(title, bodyHtml, footerHtml) {
+    if (!modalOverlay) return;
+    modalTitle.textContent = title;
+    modalBody.innerHTML = bodyHtml;
+    modalFooter.innerHTML = footerHtml || '';
+    modalOverlay.hidden = false;
+  }
+  function closeModal() {
+    if (modalOverlay) modalOverlay.hidden = true;
+  }
+
+  function render() {
+    const items = loadLieferanten();
+    listEl.innerHTML = items.length
+      ? items.map((l) => `
+        <div class="col-config-row" data-lf-row="${esc(l.id)}">
+          <div style="flex:1;">
+            <div style="font-weight:600;">${esc(l.name || '–')}</div>
+            <div style="font-size:12px; color:var(--gray-500);">${esc(l.strasse || '')}${l.strasse && l.plzOrt ? ', ' : ''}${esc(l.plzOrt || '')}${(l.kontaktName || l.kontaktTelefon) ? ' · ' + esc([l.kontaktName, l.kontaktTelefon].filter(Boolean).join(' · ')) : ''}</div>
+          </div>
+          <button type="button" class="link-action" data-edit-lf="${esc(l.id)}">Bearbeiten</button>
+          <button type="button" class="link-action" data-delete-lf="${esc(l.id)}" style="color:var(--red);">Löschen</button>
+        </div>`).join('')
+      : '<div class="changelog-empty">Noch keine Lieferanten angelegt.</div>';
+    listEl.querySelectorAll('[data-edit-lf]').forEach((btn) => {
+      btn.addEventListener('click', () => openLieferantModal(btn.getAttribute('data-edit-lf')));
+    });
+    listEl.querySelectorAll('[data-delete-lf]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-delete-lf');
+        if (!confirm('Diesen Lieferanten wirklich löschen? Bereits erstellte Bestellungen bleiben davon unberührt.')) return;
+        saveLieferanten(loadLieferanten().filter((l) => l.id !== id));
+        render();
+      });
+    });
+  }
+
+  function lieferantModalHtml(item) {
+    return `
+      <div class="field">
+        <label>Name</label>
+        <div class="input-wrap"><input type="text" id="lf-name" value="${esc(item.name || '')}" placeholder="z. B. Hahn Stahlrohrhandel GmbH"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Straße</label><div class="input-wrap"><input type="text" id="lf-strasse" value="${esc(item.strasse || '')}"></div></div>
+        <div class="field"><label>PLZ / Ort</label><div class="input-wrap"><input type="text" id="lf-plzort" value="${esc(item.plzOrt || '')}"></div></div>
+      </div>
+      <div class="hr" style="margin:14px 0;"></div>
+      <div class="subheading" style="margin-bottom:0;">Ansprechpartner beim Lieferanten</div>
+      <div class="field-row">
+        <div class="field"><label>Name</label><div class="input-wrap"><input type="text" id="lf-kontakt-name" value="${esc(item.kontaktName || '')}"></div></div>
+        <div class="field"><label>Telefon</label><div class="input-wrap"><input type="text" id="lf-kontakt-telefon" value="${esc(item.kontaktTelefon || '')}"></div></div>
+      </div>
+      <div class="field">
+        <label>E-Mail</label>
+        <div class="input-wrap"><input type="email" id="lf-kontakt-email" value="${esc(item.kontaktEmail || '')}"></div>
+      </div>
+    `;
+  }
+
+  function openLieferantModal(id) {
+    let item = { name: '', strasse: '', plzOrt: '', kontaktName: '', kontaktTelefon: '', kontaktEmail: '' };
+    let title = 'Lieferant hinzufügen';
+    if (id) {
+      const found = loadLieferanten().find((x) => x.id === id);
+      if (found) item = found;
+      title = 'Lieferant bearbeiten';
+    }
+    openModal(title, lieferantModalHtml(item), `
+      <button type="button" class="matt-tool-btn" id="lf-cancel">Abbrechen</button>
+      <button type="button" class="btn-primary" id="lf-save">Speichern</button>
+    `);
+    document.getElementById('lf-cancel').addEventListener('click', closeModal);
+    document.getElementById('lf-save').addEventListener('click', () => {
+      const name = document.getElementById('lf-name').value.trim();
+      if (!name) { alert('Bitte einen Namen eingeben.'); return; }
+      const data = {
+        name,
+        strasse: document.getElementById('lf-strasse').value.trim(),
+        plzOrt: document.getElementById('lf-plzort').value.trim(),
+        kontaktName: document.getElementById('lf-kontakt-name').value.trim(),
+        kontaktTelefon: document.getElementById('lf-kontakt-telefon').value.trim(),
+        kontaktEmail: document.getElementById('lf-kontakt-email').value.trim(),
+      };
+      const list = loadLieferanten();
+      if (id) {
+        const existing = list.find((x) => x.id === id);
+        if (existing) Object.assign(existing, data);
+      } else {
+        list.push(Object.assign({ id: makeLieferantId() }, data));
+      }
+      saveLieferanten(list);
+      closeModal();
+      render();
+    });
+  }
+
+  const addBtn = document.getElementById('lf-template-add-btn');
+  if (addBtn) addBtn.addEventListener('click', () => openLieferantModal(null));
+
+  window.levelbuildOnShowLieferanten = render;
+  render();
+})();
+
+// ======================================================================
+// Elementenvorlagen: projektübergreifende, feste Formate für Elemente-
+// Sammlungen (Nutzer-Wunsch, Folgeturn 3 - siehe Kommentar bei
+// ELEMENT_TEMPLATES_KEY weiter oben). Verwaltung analog zum Lieferanten-
+// Panel (modal-gesteuert), nur mit einem zusätzlichen Schritt: eine
+// Beispieldatei einlesen, deren erkannte Kopfzeile das feste Format wird.
+// Nur aktiv, wenn #et-template-list existiert (Vorlagen-Tab der Projekte-
+// Seite).
+// ======================================================================
+(function () {
+  const listEl = document.getElementById('et-template-list');
+  if (!listEl) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+
+  const modalOverlay = document.getElementById('modal-overlay');
+  const modalTitle = document.getElementById('modal-title');
+  const modalBody = document.getElementById('modal-body');
+  const modalFooter = document.getElementById('modal-footer');
+  function openModal(title, bodyHtml, footerHtml) {
+    if (!modalOverlay) return;
+    modalTitle.textContent = title;
+    modalBody.innerHTML = bodyHtml;
+    modalFooter.innerHTML = footerHtml || '';
+    modalOverlay.hidden = false;
+  }
+  function closeModal() { if (modalOverlay) modalOverlay.hidden = true; }
+
+  function render() {
+    const items = loadElementTemplates();
+    listEl.innerHTML = items.length
+      ? items.map((t) => {
+          const cols = t.columns || [];
+          const preview = cols.length ? cols.slice(0, 4).map((c) => c.label).join(', ') + (cols.length > 4 ? ' …' : '') : 'kein Format festgelegt';
+          return `
+        <div class="col-config-row" data-et-row="${esc(t.id)}">
+          <div style="flex:1;">
+            <div style="font-weight:600;">${esc(t.name)}</div>
+            <div style="font-size:12px; color:var(--gray-500);">${cols.length} Spalten: ${esc(preview)}</div>
+          </div>
+          <button type="button" class="link-action" data-edit-et="${esc(t.id)}">Bearbeiten</button>
+          <button type="button" class="link-action" data-delete-et="${esc(t.id)}" style="color:var(--red);">Löschen</button>
+        </div>`;
+        }).join('')
+      : '<div class="changelog-empty">Noch keine Elementenvorlagen angelegt.</div>';
+    listEl.querySelectorAll('[data-edit-et]').forEach((btn) => {
+      btn.addEventListener('click', () => openElementTemplateModal(btn.getAttribute('data-edit-et')));
+    });
+    listEl.querySelectorAll('[data-delete-et]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-delete-et');
+        if (!confirm('Diese Elementenvorlage wirklich löschen? Bereits daraus angelegte Elementensammlungen in Projekten bleiben davon unberührt (sie behalten ihr bisheriges Format).')) return;
+        saveElementTemplates(loadElementTemplates().filter((t) => t.id !== id));
+        render();
+      });
+    });
+  }
+
+  function columnsPreviewHtml(cols) {
+    if (!cols || !cols.length) return '<div class="changelog-empty" style="margin-top:8px;">Noch kein Format festgelegt - zuerst eine Beispieldatei einlesen.</div>';
+    return `<div class="col-config-list" style="margin-top:8px;">${cols.map((c) => `<div class="col-config-row"><span>${esc(c.label)}</span></div>`).join('')}</div>`;
+  }
+
+  function openElementTemplateModal(id) {
+    let item = { name: '', columns: [] };
+    let title = 'Elementenvorlage anlegen';
+    if (id) {
+      const found = loadElementTemplates().find((x) => x.id === id);
+      if (found) item = found;
+      title = 'Elementenvorlage bearbeiten';
+    }
+    let pendingColumns = (item.columns || []).slice();
+    openModal(title, `
+      <div class="field">
+        <label>Name</label>
+        <div class="input-wrap"><input type="text" id="et-name" value="${esc(item.name || '')}" placeholder="z. B. Schweißliste"></div>
+      </div>
+      <div class="hr" style="margin:14px 0;"></div>
+      <div class="subheading" style="margin-bottom:0;">Festes Format</div>
+      <div style="font-size:12px; color:var(--gray-500); margin-top:-4px;">
+        Beispieldatei einlesen - die erkannte Kopfzeile wird zum festen, dauerhaften Format dieser Vorlage (erste Spalte ist der eindeutige Schlüssel, analog zur Mastnummer bei der Masttafel).
+      </div>
+      <button type="button" class="matt-tool-btn" id="et-import-btn" style="align-self:flex-start; margin-top:8px;">Beispieldatei einlesen (.xlsx)</button>
+      <input type="file" id="et-file-input" accept=".xlsx,.xls" hidden>
+      <div id="et-columns-preview">${columnsPreviewHtml(pendingColumns)}</div>
+    `, `
+      <button type="button" class="matt-tool-btn" id="et-cancel">Abbrechen</button>
+      <button type="button" class="btn-primary" id="et-save">Speichern</button>
+    `);
+
+    document.getElementById('et-import-btn').addEventListener('click', () => document.getElementById('et-file-input').click());
+    document.getElementById('et-file-input').addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const bytes = new Uint8Array(evt.target.result);
+          const wb = XLSX.read(bytes, { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const parsed = parseGenericElementSheet(ws);
+          if (!parsed.columns.length) { alert('In dieser Datei konnte keine Kopfzeile erkannt werden.'); return; }
+          pendingColumns = parsed.columns;
+          const preview = document.getElementById('et-columns-preview');
+          if (preview) preview.innerHTML = columnsPreviewHtml(pendingColumns);
+        } catch (err) {
+          alert('Datei konnte nicht gelesen werden - bitte eine gültige xlsx-Datei wählen.');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    document.getElementById('et-cancel').addEventListener('click', closeModal);
+    document.getElementById('et-save').addEventListener('click', () => {
+      const name = document.getElementById('et-name').value.trim();
+      if (!name) { alert('Bitte einen Namen eingeben.'); return; }
+      if (!pendingColumns.length) { alert('Bitte zuerst eine Beispieldatei einlesen, um das feste Format festzulegen.'); return; }
+      const list = loadElementTemplates();
+      if (id) {
+        const existing = list.find((x) => x.id === id);
+        if (existing) { existing.name = name; existing.columns = pendingColumns; }
+      } else {
+        list.push({ id: makeElementTemplateId(), name, columns: pendingColumns, createdAt: new Date().toISOString() });
+      }
+      saveElementTemplates(list);
+      closeModal();
+      render();
+    });
+  }
+
+  const addBtn = document.getElementById('et-template-add-btn');
+  if (addBtn) addBtn.addEventListener('click', () => openElementTemplateModal(null));
+
+  window.levelbuildOnShowElementTemplates = render;
+  render();
+})();
+
+// ======================================================================
 // Masttafel: real import (native file picker / drag-drop), parsed
 // client-side with SheetJS, with Bauwerksnummer-keyed versioning,
 // column show/hide + freeze + saved views, zoom, a Bauwerk detail modal
@@ -5194,6 +7720,32 @@ function btRemoveNode(nodes, id) {
       else if (r > range.s.r) break;
     }
 
+    // "Datenpfad <Name>"-Spalten (siehe extractDatenpfadRefs weiter oben)
+    // werden nie als normale Tabellenspalte übernommen - weder im
+    // Tabellenkopf (theadHtml) noch in den Zeilenwerten/Versionen, da ihr
+    // Zellwert ein Datei-Pfad ist, kein Anzeigewert. Vorher ermitteln,
+    // welche rohen Spaltenpositionen das betrifft, und einen fortlaufenden,
+    // lückenlosen Index für alle übrigen Spalten vergeben - dieser
+    // bereinigte Index landet in columns[].idx, den data-col-Attributen und
+        // den Zeilenwerten, nicht die rohe Blattposition. (Angenommen wird,
+    // dass Datenpfad-Spalten einfache, nicht mit Nachbarn verbundene
+    // Einzelspalten sind - bei einer Masttafel realistisch, da sie kein Teil
+    // des festen, mehrzeiligen Kopfzeilen-Layouts sind.)
+    const excludedRawCols = new Set();
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const label = getColumnLabel(ws, mergeMap, range, headerEndRow, c);
+      if (/^Datenpfad\b/i.test(String(label || '').trim())) excludedRawCols.add(c);
+    }
+    const keptIdxByRawCol = new Map();
+    {
+      let n = 0;
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        if (excludedRawCols.has(c)) continue;
+        keptIdxByRawCol.set(c, n);
+        n++;
+      }
+    }
+
     const consumed = {};
     const headerRowsHtml = [];
     for (let r = range.s.r; r <= headerEndRow; r++) {
@@ -5201,6 +7753,7 @@ function btRemoveNode(nodes, id) {
       for (let c = range.s.c; c <= range.e.c; c++) {
         const key = r + ',' + c;
         if (consumed[key]) continue;
+        if (excludedRawCols.has(c)) { consumed[key] = true; continue; }
         const info = mergeMap[key];
         const isKeyCol = c === range.s.c ? ' class="key-col"' : '';
         if (info && info.topR === r && info.topC === c) {
@@ -5218,11 +7771,11 @@ function btRemoveNode(nodes, id) {
           // group heading above it too.
           const isLeaf = (r + info.rowspan - 1) === headerEndRow;
           if (isLeaf) attrs.push('data-leaf="1"');
-          rowHtml += `<th ${attrs.join(' ')}${isKeyCol} data-col="${c - range.s.c}">${esc(cellText(ws, r, c)).replace(/\n/g, '<br>')}</th>`;
+          rowHtml += `<th ${attrs.join(' ')}${isKeyCol} data-col="${keptIdxByRawCol.get(c)}">${esc(cellText(ws, r, c)).replace(/\n/g, '<br>')}</th>`;
         } else if (!info) {
           consumed[key] = true;
           const leafAttr = r === headerEndRow ? ' data-leaf="1"' : '';
-          rowHtml += `<th${leafAttr}${isKeyCol} data-col="${c - range.s.c}">${esc(cellText(ws, r, c)).replace(/\n/g, '<br>')}</th>`;
+          rowHtml += `<th${leafAttr}${isKeyCol} data-col="${keptIdxByRawCol.get(c)}">${esc(cellText(ws, r, c)).replace(/\n/g, '<br>')}</th>`;
         }
       }
       headerRowsHtml.push(rowHtml);
@@ -5239,22 +7792,27 @@ function btRemoveNode(nodes, id) {
 
     const columns = [];
     for (let c = range.s.c; c <= range.e.c; c++) {
-      columns.push({ idx: c - range.s.c, label: getColumnLabel(ws, mergeMap, range, headerEndRow, c) });
+      if (excludedRawCols.has(c)) continue;
+      columns.push({ idx: keptIdxByRawCol.get(c), label: getColumnLabel(ws, mergeMap, range, headerEndRow, c) });
     }
 
     const bodyConsumed = {};
     const rows = [];
     for (let r = headerEndRow + 1; r <= range.e.r; r++) {
       const values = [];
-      for (let c = range.s.c; c <= range.e.c; c++) values.push(cellText(ws, r, c));
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        if (excludedRawCols.has(c)) continue;
+        values.push(cellText(ws, r, c));
+      }
       const rowMerges = [];
       for (let c = range.s.c; c <= range.e.c; c++) {
         const key = r + ',' + c;
         if (bodyConsumed[key]) continue;
+        if (excludedRawCols.has(c)) { bodyConsumed[key] = true; continue; }
         const info = mergeMap[key];
         if (info && info.topR === r && info.topC === c && info.colspan > 1) {
           for (let cc = c; cc < c + info.colspan; cc++) bodyConsumed[r + ',' + cc] = true;
-          rowMerges.push({ start: c - range.s.c, len: info.colspan });
+          rowMerges.push({ start: keptIdxByRawCol.get(c), len: info.colspan });
         } else if (info) {
           bodyConsumed[key] = true;
         }
@@ -7270,6 +9828,12 @@ function btRemoveNode(nodes, id) {
         const ws = wb.Sheets[wb.SheetNames[0]];
         const parsed = parseWorkbookSheet(ws);
         if (!parsed) throw new Error('empty sheet');
+        // Siehe Kommentar bei extractDatenpfadRefs/handleDatenpfadAfterImport
+        // weiter oben in app.js: "Datenpfad <Name>"-Spalten sind bereits aus
+        // parsed.columns/rows entfernt (parseWorkbookSheet) - hier nur noch
+        // die eigentlichen Pfad-Werte für die spätere Dokumenten-Auflösung
+        // einsammeln.
+        const datenpfadRefs = extractDatenpfadRefs(ws, null);
         const importedAt = new Date().toISOString();
         const summary = importIntoStore(parsed, { name: file.name, importedAt, index: indexLetter || null });
 
@@ -7297,6 +9861,7 @@ function btRemoveNode(nodes, id) {
           ? `${file.name}: ${summary.newKeys} neu, ${summary.changedKeys} mit Änderungen (neue Version), ${summary.unchangedKeys} unverändert.`
           : `${file.name}: ${summary.newKeys} neu, ${summary.unchangedKeys} unverändert – keine Änderungen erkannt.`;
         console.log(msg);
+        handleDatenpfadAfterImport(datenpfadRefs, file.name, attachMastDatenpfadDokumente);
       } catch (err) {
         console.error('Masttafel-Import fehlgeschlagen:', err);
         alert('Diese Datei konnte nicht gelesen werden. Bitte eine gültige Excel-Datei (.xlsx/.xls) auswählen.');
@@ -7491,6 +10056,73 @@ function btRemoveNode(nodes, id) {
 
   const deleteSelectedBtn = document.getElementById('matt-delete-selected');
   if (deleteSelectedBtn) deleteSelectedBtn.addEventListener('click', deleteSelectedBauwerke);
+
+  // Nutzer-Wunsch: "es muss eine Möglichkeit geben mehrere Masten
+  // auszuwählen und ihnen eine Tätigkeitenliste zuzuordnen" - bislang ging
+  // das nur einzeln auf der Mast-Detail-Seite. Nutzt dieselbe Checkbox-
+  // Auswahl (MT.selectedKeys), die "Löschen" schon anbietet, und schreibt
+  // direkt in MAST_TL_ASSIGNMENT_KEY - exakt denselben Speicher, den auch
+  // die Mast-Detail-Seite und die Regel-Automatik (siehe
+  // applyMastTlRegeln() weiter oben in app.js) verwenden, sodass sich
+  // einzelne Standorte danach dort weiterhin individuell nachjustieren
+  // lassen.
+  function openBulkAssignTlModal() {
+    if (MT.selectedKeys.size === 0) return;
+    const count = MT.selectedKeys.size;
+    // Individuelle Standort-Kopien (siehe individualizeForMast() auf der
+    // Mast-Detail-Seite) sind exklusiv für genau einen Mast gedacht - bei
+    // einer Mehrfachauswahl werden nur die allgemeinen Projekt-Listen
+    // angeboten, damit eine solche Kopie nicht versehentlich mehreren
+    // Standorten gleichzeitig zugewiesen wird.
+    const lists = loadTlProjectList().filter((l) => !l.mastKey);
+    modalTitle.textContent = `Tätigkeitsliste für ${count} Standort${count === 1 ? '' : 'e'} zuordnen`;
+    modalBody.innerHTML = `
+      <div style="font-size:12px; color:var(--gray-500); margin-bottom:10px;">
+        Bereits bestehende Zuordnungen der ausgewählten Standorte werden dabei überschrieben. Einzelne Standorte lassen sich danach jederzeit auf der Mast-Detail-Seite individuell anpassen.
+      </div>
+      <div class="field">
+        <label>Tätigkeitsliste</label>
+        <div class="input-wrap">
+          <select id="matt-bulk-tl-select">
+            <option value="">Keine (Zuordnung entfernen)</option>
+            ${lists.map((l) => `<option value="${esc(l.id)}">${esc(l.name)} (${l.tasks.length})</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    `;
+    modalFooter.innerHTML = `
+      <button class="btn-primary" id="matt-bulk-tl-save">Zuordnen</button>
+      <button class="matt-tool-btn" id="matt-bulk-tl-cancel">Abbrechen</button>
+    `;
+    modalOverlay.hidden = false;
+    const cancelBtn = document.getElementById('matt-bulk-tl-cancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    const saveBtn = document.getElementById('matt-bulk-tl-save');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        const selId = document.getElementById('matt-bulk-tl-select').value;
+        const assignments = loadMastTlAssignments();
+        MT.selectedKeys.forEach((key) => {
+          if (selId) assignments[key] = selId; else delete assignments[key];
+        });
+        saveMastTlAssignments(assignments);
+        // Wie die Einzel-Zuordnung auf der Mast-Detail-Seite gilt auch eine
+        // hier per Mehrfachauswahl getroffene Zuordnung als manuell - eine
+        // spätere Regel-Anwendung (Projekteinstellungen) lässt diese
+        // Standorte danach in Ruhe (siehe MAST_TL_MANUAL_KEY in app.js).
+        const manuell = loadMastTlManuell();
+        MT.selectedKeys.forEach((key) => { manuell[key] = true; });
+        saveMastTlManuell(manuell);
+        closeModal();
+        const gewaehlt = lists.find((l) => l.id === selId);
+        alert(gewaehlt
+          ? `"${gewaehlt.name}" wurde ${count} Standort${count === 1 ? '' : 'en'} zugeordnet.`
+          : `Zuordnung für ${count} Standort${count === 1 ? '' : 'e'} entfernt.`);
+      });
+    }
+  }
+  const assignTlSelectedBtn = document.getElementById('matt-assign-tl-selected');
+  if (assignTlSelectedBtn) assignTlSelectedBtn.addEventListener('click', openBulkAssignTlModal);
 
   renderViewSwitcher();
 
@@ -7922,26 +10554,181 @@ function btRemoveNode(nodes, id) {
     try { raw = JSON.parse(sessionStorage.getItem('levelbuild_mast_detail') || 'null'); } catch (e) { raw = null; }
     return raw ? String(raw.key || '') : '';
   }
+  // Statusoptionen gelten seit dem Nutzer-Feedback ("Statusoption ... auf
+  // die einzelnen Tätigkeiten übertragen, nicht übergeordnet auf die ganze
+  // Tätigkeitenliste") pro Tätigkeit - Fallback auf die (ältere) Listen-
+  // weite Konfiguration bzw. den Hart-Default, falls eine Tätigkeit noch
+  // keine eigenen statusOptions hat. Eigene Kopie dieser kleinen Funktion,
+  // da diese IIFE ihr eigenes, unabhängiges Scope hat (siehe Kommentar am
+  // Dateianfang zu diesem Muster).
+  function taskStatusOptions(t, list) {
+    if (t && Array.isArray(t.statusOptions) && t.statusOptions.length) return t.statusOptions;
+    if (list && Array.isArray(list.statusOptions) && list.statusOptions.length) return list.statusOptions;
+    return [
+      { id: 'st-default-open', label: 'Nicht erledigt', color: '#8a94a6', icon: '○' },
+      { id: 'st-default-done', label: 'Erledigt', color: '#3fb950', icon: '✓' },
+    ];
+  }
+  function makeLocalId(prefix) {
+    return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  // ----------------------------------------------------------------------
+  // Standort-individuelle Kopie: Nutzer-Wunsch: eine einem Standort
+  // zugeordnete Tätigkeitsliste muss sich für GENAU diesen einen Standort
+  // anpassen lassen können, ohne die Projekt-Tätigkeitsliste (die evtl.
+  // andere Standorte teilen) oder die übergeordnete Vorlage zu verändern -
+  // "selbe Logik mit den Protokollen, die in der Liste dann sind". Statt
+  // eines eigenen Speichers/einer eigenen Editor-UI lebt die individuelle
+  // Kopie einfach als ganz normaler Eintrag in derselben
+  // levelbuild_taetigkeitslisten_projekt-Liste (bzw. für Protokolle in
+  // levelbuild_protokolle_projekt), nur mit einem zusätzlichen `mastKey`-
+  // Feld markiert - bearbeitet wird sie über den bereits bestehenden
+  // Tätigkeitsliste-Editor (window.levelbuildOpenTaetigkeitsliste), es
+  // entsteht also bewusst KEIN neuer Bereich auf dieser Seite.
+  // ----------------------------------------------------------------------
+
+  // Kopiert die von den Tasks der Liste referenzierten (bislang projekt-
+  // weiten) Protokolle in frische, mastKey-markierte Kopien - analog zu
+  // cascadeProtokolleInsProjektFuerListe() weiter oben in app.js, nur
+  // "Projekt -> Standort" statt "Vorlage -> Projekt". Gibt eine
+  // altePid -> neuePid-Map zurück, mit der die kopierten Tasks unten auf
+  // die neuen, exklusiven Protokoll-Kopien umgeschrieben werden.
+  function cascadeProtokolleFuerStandort(mastKey, list) {
+    const idMap = {};
+    const referencedIds = new Set();
+    (list.tasks || []).forEach((t) => {
+      (Array.isArray(t.protokollIds) ? t.protokollIds : []).forEach((pid) => { if (pid) referencedIds.add(pid); });
+    });
+    if (!referencedIds.size) return idMap;
+    const projectProtokolle = loadProtokollProjectList();
+    let changed = false;
+    referencedIds.forEach((refId) => {
+      const src = projectProtokolle.find((p) => p.id === refId);
+      if (!src) return;
+      const copy = JSON.parse(JSON.stringify(src));
+      copy.id = makeProtokollId('pr');
+      copy.mastKey = mastKey;
+      copy.sourceProjectProtokollId = src.id;
+      (copy.bausteine || []).forEach((b) => { b.id = makeProtokollId('bs'); });
+      projectProtokolle.push(copy);
+      idMap[refId] = copy.id;
+      changed = true;
+    });
+    if (changed) saveProtokollProjectList(projectProtokolle);
+    return idMap;
+  }
+
+  // Legt (falls noch nicht geschehen) eine unabhängige, mastKey-markierte
+  // Kopie der aktuell zugeordneten Tätigkeitsliste an, ordnet sie diesem
+  // Mast zu (als "manuell", siehe MAST_TL_MANUAL_KEY - eine spätere
+  // Regel-Anwendung lässt diesen Standort dann in Ruhe) und öffnet direkt
+  // den bestehenden Editor dafür. Ist die aktuell zugeordnete Liste bereits
+  // die individuelle Kopie dieses Standorts, wird sie ohne Rückfrage
+  // direkt zum Bearbeiten geöffnet.
+  function individualizeForMast(mastKey, mastLabel) {
+    const assignments = loadMastTlAssignments();
+    const currentId = assignments[mastKey];
+    const sourceList = currentId ? loadTlProjectList().find((l) => l.id === currentId) : null;
+    if (!sourceList) {
+      alert('Bitte zuerst oben eine Tätigkeitsliste zuordnen, bevor sie individuell angepasst werden kann.');
+      return;
+    }
+    if (sourceList.mastKey === mastKey) {
+      window.levelbuildOpenTaetigkeitsliste('project', sourceList.id);
+      return;
+    }
+    if (!confirm(`Für „${mastLabel}" eine eigene, unabhängige Kopie von „${sourceList.name}" anlegen? Änderungen daran wirken sich danach nur auf diesen einen Standort aus - die Projekt-Liste (und alle anderen Standorte, die sie ggf. nutzen) sowie die übergeordnete Vorlage bleiben unverändert.`)) return;
+
+    const protokollIdMap = cascadeProtokolleFuerStandort(mastKey, sourceList);
+    const copy = JSON.parse(JSON.stringify(sourceList));
+    copy.id = makeLocalId('tl');
+    copy.mastKey = mastKey;
+    copy.sourceProjectListId = sourceList.id;
+    copy.tasks.forEach((t) => {
+      t.id = makeLocalId('tk');
+      // Wie beim Vorlage->Projekt-Übernehmen: jede Aufgabe bekommt ihre
+      // eigenen, frisch ge-id-eten Statusoptionen, damit auch Umbenennungen
+      // der Status-Pillen die geteilte Projekt-Liste nicht antasten.
+      const srcStatus = taskStatusOptions(t, sourceList);
+      t.statusOptions = srcStatus.map((s) => ({ id: makeLocalId('st'), label: s.label, color: s.color, icon: s.icon }));
+      if (Array.isArray(t.protokollIds) && t.protokollIds.length) {
+        t.protokollIds = t.protokollIds.map((pid) => protokollIdMap[pid]).filter(Boolean);
+      }
+    });
+    const lists = loadTlProjectList();
+    lists.push(copy);
+    saveTlProjectList(lists);
+
+    assignments[mastKey] = copy.id;
+    saveMastTlAssignments(assignments);
+    const manuell = loadMastTlManuell();
+    manuell[mastKey] = true;
+    saveMastTlManuell(manuell);
+
+    window.levelbuildOpenTaetigkeitsliste('project', copy.id);
+  }
 
   function render() {
     const mastKey = currentMastKey();
     const tasksEl = document.getElementById('md-tl-tasks');
     const countEl = document.getElementById('md-taetigkeiten-count');
+    const hintEl = document.getElementById('md-tl-manual-hint');
     if (!mastKey) {
       selectEl.disabled = true;
       selectEl.innerHTML = '<option value="">–</option>';
       if (tasksEl) tasksEl.innerHTML = '';
       if (countEl) countEl.textContent = '0';
+      if (hintEl) hintEl.hidden = true;
       return;
     }
     selectEl.disabled = false;
-    const lists = loadTlProjectList();
+    const allLists = loadTlProjectList();
+    // Individuelle Standort-Kopien (siehe individualizeForMast() oben) sind
+    // exklusiv für genau einen Mast gedacht - im Dropdown erscheinen daher
+    // nur die allgemeinen Projekt-Listen plus (falls vorhanden) die
+    // individuelle Kopie GENAU dieses Masts, nicht die anderer Standorte.
+    const lists = allLists.filter((l) => !l.mastKey || l.mastKey === mastKey);
     const assignments = loadMastTlAssignments();
     const currentId = assignments[mastKey] || '';
     selectEl.innerHTML = '<option value="">Keine zugeordnet</option>' +
-      lists.map((l) => `<option value="${esc(l.id)}"${l.id === currentId ? ' selected' : ''}>${esc(l.name)} (${l.tasks.length})</option>`).join('');
+      lists.map((l) => `<option value="${esc(l.id)}"${l.id === currentId ? ' selected' : ''}>${esc(l.name)}${l.mastKey ? ' (individuelle Kopie)' : ''} (${l.tasks.length})</option>`).join('');
     const list = lists.find((l) => l.id === currentId);
     if (countEl) countEl.textContent = list ? String(list.tasks.length) : '0';
+    const individualizeBtn = document.getElementById('md-tl-individualize');
+    if (individualizeBtn) {
+      if (!list) {
+        individualizeBtn.hidden = true;
+      } else {
+        individualizeBtn.hidden = false;
+        individualizeBtn.textContent = list.mastKey === mastKey
+          ? 'Individuelle Kopie dieses Standorts bearbeiten'
+          : 'Für diesen Standort individuell anpassen';
+      }
+    }
+    // Nutzer-Wunsch: eine hier einzeln (manuell) für genau diesen Mast
+    // gesetzte Zuordnung soll bestehen bleiben, auch wenn später erneut
+    // "Regeln jetzt anwenden" (Projekteinstellungen) läuft - siehe
+    // applyMastTlRegeln(). Der Hinweis + Reset-Link macht sichtbar, dass
+    // (und wie) das rückgängig gemacht werden kann.
+    if (hintEl) {
+      const manuell = loadMastTlManuell();
+      if (manuell[mastKey]) {
+        hintEl.hidden = false;
+        hintEl.innerHTML = 'Manuell zugeordnet - wird von der automatischen Regel-Zuordnung nicht mehr verändert. <button type="button" class="link-action" id="md-tl-reset-manual">Automatik wieder zulassen</button>';
+        const resetBtn = document.getElementById('md-tl-reset-manual');
+        if (resetBtn) {
+          resetBtn.addEventListener('click', () => {
+            const m = loadMastTlManuell();
+            delete m[mastKey];
+            saveMastTlManuell(m);
+            render();
+          });
+        }
+      } else {
+        hintEl.hidden = true;
+      }
+    }
     if (tasksEl) {
       if (!list) {
         tasksEl.innerHTML = '<div class="changelog-empty">Diesem Mast ist noch keine Tätigkeitsliste zugeordnet - danach lassen sich Aufgaben und Protokolle in der Handy-App für genau diesen Mast bearbeiten.</div>';
@@ -7950,8 +10737,9 @@ function btRemoveNode(nodes, id) {
       } else {
         const statusMap = loadMastTaskStatus()[mastKey] || {};
         tasksEl.innerHTML = list.tasks.map((t) => {
-          const statusId = statusMap[t.id] || (list.statusOptions[0] && list.statusOptions[0].id);
-          const status = list.statusOptions.find((s) => s.id === statusId) || list.statusOptions[0];
+          const opts = taskStatusOptions(t, list);
+          const statusId = statusMap[t.id] || (opts[0] && opts[0].id);
+          const status = opts.find((s) => s.id === statusId) || opts[0];
           return `<div class="col-config-row">
             <span>${t.nr != null ? esc(String(t.nr)) + '. ' : ''}${esc(t.titel || '(ohne Titel)')}</span>
             ${status ? `<span class="badge-mini" style="background:${esc(status.color)}22; color:${esc(status.color)};">${esc(status.icon || '')} ${esc(status.label)}</span>` : ''}
@@ -7968,8 +10756,24 @@ function btRemoveNode(nodes, id) {
     if (selectEl.value) assignments[mastKey] = selectEl.value;
     else delete assignments[mastKey];
     saveMastTlAssignments(assignments);
+    // Eine hier am Mast-Detail einzeln getroffene Auswahl gilt als manuell -
+    // applyMastTlRegeln() lässt diesen Standort danach in Ruhe (siehe
+    // MAST_TL_MANUAL_KEY oben in app.js), bis der Nutzer über den
+    // "Automatik wieder zulassen"-Link (siehe render()) das Gegenteil sagt.
+    const manuell = loadMastTlManuell();
+    manuell[mastKey] = true;
+    saveMastTlManuell(manuell);
     render();
   });
+
+  const individualizeBtnEl = document.getElementById('md-tl-individualize');
+  if (individualizeBtnEl) {
+    individualizeBtnEl.addEventListener('click', () => {
+      const mastKey = currentMastKey();
+      if (!mastKey) return;
+      individualizeForMast(mastKey, currentMastLabel());
+    });
+  }
 
   // ----------------------------------------------------------------------
   // "Datensätze": zeigt die in der Handy-App über die Tätigkeitsliste
@@ -8141,6 +10945,661 @@ function btRemoveNode(nodes, id) {
   };
   render();
   renderDatensaetze(currentMastKey());
+})();
+
+// ======================================================================
+// Mast-Detail: Verknüpfungen-Kachel "Dokumente" - zeigt die Anzahl der über
+// den Datenpfad-Import automatisch hinterlegten Dokumente (siehe
+// MAST_DOKUMENTE_KEY/attachMastDatenpfadDokumente weiter oben in app.js) und
+// öffnet eine einfache Liste mit Download-Links, im selben Stil wie die
+// Datei-Liste der Masttafel (.file-row, siehe style.css). Eigenständige
+// IIFE, chaint sich zusätzlich in window.levelbuildMastDetailRender ein.
+// Only runs on mast-detail.html (guarded by #md-dok-tile).
+// ======================================================================
+(function () {
+  const tile = document.getElementById('md-dok-tile');
+  if (!tile) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+  function fmtBytes(n) {
+    n = Number(n) || 0;
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+  function fmtDatumKurz(iso) {
+    const s = String(iso || '').slice(0, 10);
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    return m ? `${m[3]}.${m[2]}.${m[1]}` : s;
+  }
+  function currentKey() {
+    let raw;
+    try { raw = JSON.parse(sessionStorage.getItem('levelbuild_mast_detail') || 'null'); } catch (e) { raw = null; }
+    return raw ? raw.key : null;
+  }
+
+  const modalOverlay = document.getElementById('modal-overlay');
+  const modalTitle = document.getElementById('modal-title');
+  const modalBody = document.getElementById('modal-body');
+  const modalFooter = document.getElementById('modal-footer');
+
+  function openList() {
+    const key = currentKey();
+    if (!key || !modalOverlay) return;
+    const docs = (typeof getMastDatenpfadDokumente === 'function') ? getMastDatenpfadDokumente(key) : [];
+    modalTitle.textContent = `Dokumente · Mast ${key}`;
+    modalBody.innerHTML = docs.length ? docs.map((d) => `
+      <div class="file-row">
+        <span class="file-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </span>
+        <div class="file-meta">
+          <span class="file-name">${esc(d.name)} <span class="file-section-tag">${esc(d.typ)}</span></span>
+          <span class="file-sub">${fmtBytes(d.size)} · hinzugefügt am ${fmtDatumKurz(d.attachedAt)}${d.sourceFile ? ' · aus ' + esc(d.sourceFile) : ''}</span>
+        </div>
+        <a class="icon-btn" title="Herunterladen" href="${d.url}" download="${esc(d.name)}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>
+        </a>
+      </div>`).join('') : '<div class="changelog-empty">Noch keine Dokumente über einen Datenpfad-Import hinterlegt.</div>';
+    modalFooter.innerHTML = `<button type="button" class="matt-tool-btn" id="md-dok-close">Schließen</button>`;
+    modalOverlay.hidden = false;
+    const closeBtn = document.getElementById('md-dok-close');
+    if (closeBtn) closeBtn.addEventListener('click', () => { modalOverlay.hidden = true; });
+  }
+  tile.addEventListener('click', openList);
+
+  function renderCount() {
+    const countEl = document.getElementById('md-dok-count');
+    if (!countEl) return;
+    const key = currentKey();
+    const n = key && typeof getMastDatenpfadDokumente === 'function' ? getMastDatenpfadDokumente(key).length : 0;
+    countEl.textContent = `${n} Dokument${n === 1 ? '' : 'e'}`;
+  }
+
+  const prevRenderDok = window.levelbuildMastDetailRender;
+  window.levelbuildMastDetailRender = function () {
+    if (prevRenderDok) prevRenderDok();
+    renderCount();
+  };
+  renderCount();
+})();
+
+// ======================================================================
+// Element-Detail (generische Elementensammlungen, Nutzer-Wunsch Folgeturn
+// 9: "jedes Element ... genau wie wenn ich auf einen Mast klicke dann auch
+// die selbe maske"): liest den von openElementDetailPage() (siehe
+// Elemente-IIFE weiter oben) übergebenen Datensatz aus sessionStorage und
+// rendert das Datensätze-Panel - Version-Chip-Reihe + alle importierten
+// Spaltenwerte, mit Hervorhebung geänderter Felder ggü. der Vorversion.
+// Bewusst eigenständig von den beiden Mast-Detail-IIFEs oben (eigenes
+// Scope, eigener sessionStorage-Key 'levelbuild_element_detail'), damit
+// sich Masttafel und generische Elemente niemals gegenseitig überschreiben
+// können. Only runs on the element-detail page (guarded by #ed-datensaetze-body).
+// ======================================================================
+(function () {
+  const body = document.getElementById('ed-datensaetze-body');
+  if (!body) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+  function normalize(v) {
+    return String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
+  }
+  // Eigene Kopien dieser kleinen Helfer (siehe Mast-Detail-IIFE oben,
+  // fmtDateTime/nachweisLinksHtml) - dieses Scope bleibt unabhängig.
+  function fmtDateTime(iso) {
+    if (!iso) return '–';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '–';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  function nachweisLinksHtml(nachweise) {
+    if (!nachweise || !nachweise.length) return '';
+    return `<div class="nachweis-list">${nachweise.map((n, i) =>
+      `<a class="nachweis-chip" href="${n.dataUrl}" download="${esc(n.name || ('Nachweis-' + (i + 1)))}" title="${esc(n.name || '')}">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        ${esc(n.name || 'Nachweis')}
+      </a>`).join('')}</div>`;
+  }
+
+  let raw = null;
+  let versions = null;
+  let latestVersion = null;
+  let selected = null;
+  // Nutzer-Wunsch (Folgeturn 11): "Die Versionslogic fehlt noch" - Merker,
+  // um zwischen "wirklich ein neues Element geöffnet" und "dieselbe Seite
+  // wurde nur erneut gerendert" (z. B. weil der Router showPage() für
+  // dieselbe Navigation mehrfach aufruft, oder weil "Bauabweichung
+  // erfassen" window.levelbuildElementDetailRender() erneut aufruft) zu
+  // unterscheiden - robuster als ein einmalig "verbrauchtes" initialVersion-
+  // Feld im sessionStorage-Handoff, das bei einem doppelten Aufruf sonst
+  // beim zweiten Mal schon wieder leer wäre.
+  let lastRowKey = null;
+  let lastKnownLatestVersion = null;
+
+  function render() {
+    if (!raw) return;
+    const v = versions.find((x) => x.version === selected);
+    const prev = versions.find((x) => x.version === selected - 1);
+    const isLatest = selected === latestVersion;
+
+    const crumbSammlung = document.getElementById('ed-crumb-sammlung');
+    if (crumbSammlung) crumbSammlung.textContent = raw.sammlungName || 'Sammlung';
+    const crumbKey = document.getElementById('ed-crumb-key');
+    if (crumbKey) crumbKey.textContent = `${raw.key} - ${selected}`;
+    document.title = `${raw.key} - ${selected} · levelbuild`;
+
+    // Nutzer-Wunsch (Folgeturn 10): "genau die selben Logiken ... mache
+    // alles auf einmal" - spiegelt Mast-Detail's Allgemein-Panel
+    // (#md-projekt/#md-bauabschnitt), hier zusätzlich mit dem Sammlungs-
+    // namen statt der (bei Mast-Detail ohnehin statischen) Bauwerkstruktur.
+    const projektEl = document.getElementById('ed-projekt');
+    if (projektEl) projektEl.textContent = raw.projectLabel || currentProjectLabel();
+    const sammlungNameEl = document.getElementById('ed-sammlung-name');
+    if (sammlungNameEl) sammlungNameEl.textContent = raw.sammlungName || '–';
+    const baEl = document.getElementById('ed-bauabschnitt');
+    if (baEl) baEl.textContent = raw.bauabschnittName || '–';
+
+    const chips = versions.map((x) =>
+      `<span class="ver-chip${x.version === selected ? ' active' : ''}${x.manualType === 'umplanung' ? ' ver-chip-manual' : ''}" data-goto-el-version="${x.version}">v${x.version}${x.version === latestVersion ? ' (aktuell)' : ''}${x.manualType === 'umplanung' ? ' · Umplanung/Braunstrich' : ''}</span>`
+    ).join('');
+
+    const isManual = v.manualType === 'umplanung';
+    const manualInfo = isManual
+      ? `<div class="manual-version-box">
+          <div class="manual-version-badge">Umplanung/Braunstrich</div>
+          <div class="manual-version-meta">Erfasst am ${esc(fmtDateTime(v.importedAt))}</div>
+          ${v.manualGrund ? `<div class="manual-version-grund">${esc(v.manualGrund)}</div>` : ''}
+          ${nachweisLinksHtml(v.manualNachweise)}
+        </div>`
+      : '';
+
+    const fields = (raw.columns || []).map((c) => {
+      const val = v.values[c.idx];
+      const prevVal = prev ? prev.values[c.idx] : undefined;
+      const changed = !!prev && normalize(prevVal) !== normalize(val);
+      const isNote = String(val || '').length > 28;
+      return `<div class="stat${changed ? ' stat-changed' : ''}${isNote ? ' stat-note' : ''}">
+        <span class="stat-label">${esc(c.label)}</span>
+        <span class="stat-value${val ? '' : ' empty'}">${val ? esc(val) : '–'}</span>
+      </div>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="stat-row">
+        <div class="stat"><span class="stat-label">Element</span><span class="stat-value">${esc(raw.key)}</span></div>
+        <div class="stat"><span class="stat-label">Version</span><span class="stat-value">v${selected}${isLatest ? ' (aktuell)' : ''}</span></div>
+      </div>
+      ${versions.length > 1 ? `<div class="ver-chip-row">${chips}</div>` : ''}
+      ${manualInfo}
+      <div class="hr"></div>
+      <div class="bauwerk-fields">${fields}</div>
+    `;
+    body.querySelectorAll('[data-goto-el-version]').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        selected = parseInt(chip.getAttribute('data-goto-el-version'), 10);
+        render();
+      });
+    });
+  }
+
+  // Re-reads sessionStorage (written by openElementDetailPage() right
+  // before navigating here) - exposed as window.levelbuildElementDetailRender
+  // and called again by the router every time it switches to this page
+  // (same pattern as window.levelbuildMastDetailRender above).
+  function openFromSession() {
+    try { raw = JSON.parse(sessionStorage.getItem('levelbuild_element_detail') || 'null'); } catch (e) { raw = null; }
+    if (!raw || !raw.versions || !raw.versions.length) {
+      raw = null;
+      body.innerHTML = '<div class="changelog-empty">Diese Seite wurde nicht über eine Elementensammlung geöffnet - keine Daten vorhanden.</div>';
+      const crumbSammlung = document.getElementById('ed-crumb-sammlung');
+      if (crumbSammlung) crumbSammlung.textContent = 'Sammlung';
+      const crumbKey = document.getElementById('ed-crumb-key');
+      if (crumbKey) crumbKey.textContent = 'Element';
+      const projektEl = document.getElementById('ed-projekt');
+      if (projektEl) projektEl.textContent = '–';
+      const sammlungNameEl = document.getElementById('ed-sammlung-name');
+      if (sammlungNameEl) sammlungNameEl.textContent = '–';
+      const baEl = document.getElementById('ed-bauabschnitt');
+      if (baEl) baEl.textContent = '–';
+      lastRowKey = null;
+      lastKnownLatestVersion = null;
+      return;
+    }
+    versions = raw.versions;
+    latestVersion = versions[versions.length - 1].version;
+    // Nutzer-Wunsch (Folgeturn 11): "Die Versionslogic fehlt noch" - kam der
+    // Klick aus der "Alle Versionen anzeigen"-Tabelle für eine bestimmte
+    // Version, wird direkt diese Version ausgewählt statt immer der
+    // aktuellsten - aber NUR bei einer echten Navigation zu einem (ggf.
+    // selben) Element. Ein bloßes erneutes Rendern derselben, bereits
+    // offenen Seite (Router ruft window.levelbuildElementDetailRender()
+    // z. B. nach "Bauabweichung erfassen" erneut auf) lässt die aktuelle
+    // Auswahl unangetastet, springt aber automatisch zur neuen aktuellsten
+    // Version, sobald tatsächlich eine neue Version hinzugekommen ist.
+    const isNewNavigation = raw.rowKey !== lastRowKey;
+    if (isNewNavigation) {
+      selected = (raw.initialVersion && versions.some((v) => v.version === raw.initialVersion))
+        ? raw.initialVersion
+        : latestVersion;
+    } else if (latestVersion !== lastKnownLatestVersion) {
+      selected = latestVersion;
+    } else if (!versions.some((v) => v.version === selected)) {
+      selected = latestVersion;
+    }
+    lastRowKey = raw.rowKey;
+    lastKnownLatestVersion = latestVersion;
+    render();
+  }
+
+  window.levelbuildElementDetailRender = openFromSession;
+  openFromSession();
+})();
+
+// ======================================================================
+// Element-Detail: Tätigkeitsliste zuordnen - spiegelt die Mast-Detail-
+// Tätigkeitsliste-IIFE oben, schreibt/liest aber die eigenen ELEMENT_TL_*-
+// Speicher (je Sammlung + normalisiertem Zeilen-Schlüssel verschachtelt,
+// statt nur je Mast), damit Masttafel-Zuordnungen davon unberührt bleiben.
+// Only runs on the element-detail page (guarded by #ed-tl-select).
+// ======================================================================
+(function () {
+  const selectEl = document.getElementById('ed-tl-select');
+  if (!selectEl) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+
+  function currentRaw() {
+    try { return JSON.parse(sessionStorage.getItem('levelbuild_element_detail') || 'null'); } catch (e) { return null; }
+  }
+
+  // Eigene Kopie dieser kleinen Funktion, da diese IIFE ihr eigenes,
+  // unabhängiges Scope hat (siehe Kommentar am Dateianfang zu diesem Muster).
+  function taskStatusOptions(t, list) {
+    if (t && Array.isArray(t.statusOptions) && t.statusOptions.length) return t.statusOptions;
+    if (list && Array.isArray(list.statusOptions) && list.statusOptions.length) return list.statusOptions;
+    return [
+      { id: 'st-default-open', label: 'Nicht erledigt', color: '#8a94a6', icon: '○' },
+      { id: 'st-default-done', label: 'Erledigt', color: '#3fb950', icon: '✓' },
+    ];
+  }
+
+  function render() {
+    const raw = currentRaw();
+    const tasksEl = document.getElementById('ed-tl-tasks');
+    const countEl = document.getElementById('ed-taetigkeiten-count');
+    const hintEl = document.getElementById('ed-tl-manual-hint');
+    if (!raw || !raw.sammlungId || !raw.rowKey) {
+      selectEl.disabled = true;
+      selectEl.innerHTML = '<option value="">–</option>';
+      if (tasksEl) tasksEl.innerHTML = '';
+      if (countEl) countEl.textContent = '0';
+      if (hintEl) hintEl.hidden = true;
+      return;
+    }
+    selectEl.disabled = false;
+    const sammlungId = raw.sammlungId;
+    const rowKey = raw.rowKey;
+    // Standort-individuelle Kopien (mastKey gesetzt) sind exklusiv für einen
+    // Mast gedacht und tauchen hier bewusst nicht in der Auswahl auf.
+    const lists = loadTlProjectList().filter((l) => !l.mastKey);
+    const allAssignments = loadElementTlAssignments();
+    const assignments = allAssignments[sammlungId] || {};
+    const currentId = assignments[rowKey] || '';
+    selectEl.innerHTML = '<option value="">Keine zugeordnet</option>' +
+      lists.map((l) => `<option value="${esc(l.id)}"${l.id === currentId ? ' selected' : ''}>${esc(l.name)} (${l.tasks.length})</option>`).join('');
+    const list = lists.find((l) => l.id === currentId);
+    if (countEl) countEl.textContent = list ? String(list.tasks.length) : '0';
+
+    if (hintEl) {
+      const allManuell = loadElementTlManuell();
+      const manuell = allManuell[sammlungId] || {};
+      if (manuell[rowKey]) {
+        hintEl.hidden = false;
+        hintEl.innerHTML = 'Manuell zugeordnet - wird von der automatischen Regel-Zuordnung nicht mehr verändert. <button type="button" class="link-action" id="ed-tl-reset-manual">Automatik wieder zulassen</button>';
+        const resetBtn = document.getElementById('ed-tl-reset-manual');
+        if (resetBtn) {
+          resetBtn.addEventListener('click', () => {
+            const m = loadElementTlManuell();
+            if (m[sammlungId]) delete m[sammlungId][rowKey];
+            saveElementTlManuell(m);
+            render();
+          });
+        }
+      } else {
+        hintEl.hidden = true;
+      }
+    }
+
+    if (tasksEl) {
+      if (!list) {
+        tasksEl.innerHTML = '<div class="changelog-empty">Diesem Eintrag ist noch keine Tätigkeitsliste zugeordnet - danach lassen sich Aufgaben in der Handy-App für genau diesen Eintrag bearbeiten.</div>';
+      } else if (!list.tasks.length) {
+        tasksEl.innerHTML = '<div class="changelog-empty">Diese Tätigkeitsliste hat noch keine Aufgaben.</div>';
+      } else {
+        const allStatus = loadElementTaskStatus();
+        const statusMap = (allStatus[sammlungId] || {})[rowKey] || {};
+        tasksEl.innerHTML = list.tasks.map((t) => {
+          const opts = taskStatusOptions(t, list);
+          const statusId = statusMap[t.id] || (opts[0] && opts[0].id);
+          const status = opts.find((s) => s.id === statusId) || opts[0];
+          return `<div class="col-config-row">
+            <span>${t.nr != null ? esc(String(t.nr)) + '. ' : ''}${esc(t.titel || '(ohne Titel)')}</span>
+            ${status ? `<span class="badge-mini" style="background:${esc(status.color)}22; color:${esc(status.color)};">${esc(status.icon || '')} ${esc(status.label)}</span>` : ''}
+          </div>`;
+        }).join('');
+      }
+    }
+  }
+
+  selectEl.addEventListener('change', () => {
+    const raw = currentRaw();
+    if (!raw || !raw.sammlungId || !raw.rowKey) return;
+    const sammlungId = raw.sammlungId;
+    const rowKey = raw.rowKey;
+    const allAssignments = loadElementTlAssignments();
+    allAssignments[sammlungId] = allAssignments[sammlungId] || {};
+    if (selectEl.value) allAssignments[sammlungId][rowKey] = selectEl.value;
+    else delete allAssignments[sammlungId][rowKey];
+    saveElementTlAssignments(allAssignments);
+
+    // Eine hier am Element-Detail einzeln getroffene Auswahl gilt als
+    // manuell (analog zu MAST_TL_MANUAL_KEY bei der Masttafel).
+    const allManuell = loadElementTlManuell();
+    allManuell[sammlungId] = allManuell[sammlungId] || {};
+    allManuell[sammlungId][rowKey] = true;
+    saveElementTlManuell(allManuell);
+    render();
+  });
+
+  // Chain onto the existing render hook (rather than overwrite it) so both
+  // Element-Detail-IIFEs stay in sync every time the router shows this page
+  // for a (possibly different) Element.
+  const prevRender = window.levelbuildElementDetailRender;
+  window.levelbuildElementDetailRender = function () {
+    if (prevRender) prevRender();
+    render();
+  };
+  render();
+})();
+
+// ======================================================================
+// Element-Detail: Bauabweichung/Umplanung erfassen - Nutzer-Wunsch
+// (Folgeturn 10): "genau die selben Logiken ... mache alles auf einmal".
+// Spiegelt die Bauabweichung-Logik aus der Mast-Detail-IIFE oben
+// (openBauabweichungModal/window.levelbuildAddManualMastVersion), nutzt
+// dafür aber die eigene, generische window.levelbuildAddManualElementVersion()
+// (siehe ELEMENT_DATEN_KEY-Speicher oben in app.js) - Masttafel-Daten
+// bleiben davon komplett unberührt. Only runs on the element-detail page
+// (guarded by #ed-bauabweichung-add).
+// ======================================================================
+(function () {
+  const addBtn = document.getElementById('ed-bauabweichung-add');
+  if (!addBtn) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+  function fmtDateTime(iso) {
+    if (!iso) return '–';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '–';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  function nachweisLinksHtml(nachweise) {
+    if (!nachweise || !nachweise.length) return '';
+    return `<div class="nachweis-list">${nachweise.map((n, i) =>
+      `<a class="nachweis-chip" href="${n.dataUrl}" download="${esc(n.name || ('Nachweis-' + (i + 1)))}" title="${esc(n.name || '')}">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        ${esc(n.name || 'Nachweis')}
+      </a>`).join('')}</div>`;
+  }
+
+  function currentRaw() {
+    try { return JSON.parse(sessionStorage.getItem('levelbuild_element_detail') || 'null'); } catch (e) { return null; }
+  }
+
+  function renderList() {
+    const raw = currentRaw();
+    const listEl = document.getElementById('ed-bauabweichung-list');
+    const countEl = document.getElementById('ed-bauabweichung-count');
+    addBtn.disabled = !raw;
+    if (!listEl) return;
+    const manualVersions = (raw && raw.versions) ? raw.versions.filter((x) => x.manualType === 'umplanung') : [];
+    if (countEl) countEl.textContent = String(manualVersions.length);
+    if (!manualVersions.length) {
+      listEl.innerHTML = raw ? '<div class="changelog-empty">Noch keine Bauabweichung für diesen Eintrag erfasst.</div>' : '';
+      return;
+    }
+    listEl.innerHTML = manualVersions.slice().reverse().map((v) => `
+      <div class="col-config-row" style="align-items:flex-start; flex-direction:column; gap:4px;">
+        <div style="display:flex; justify-content:space-between; width:100%; gap:8px;">
+          <span class="badge-mini">v${v.version} · Umplanung</span>
+          <span style="font-size:11px; color:var(--gray-500);">${esc(fmtDateTime(v.importedAt))}</span>
+        </div>
+        ${v.manualGrund ? `<div style="font-size:12px; color:var(--text);">${esc(v.manualGrund)}</div>` : ''}
+        ${nachweisLinksHtml(v.manualNachweise)}
+      </div>`).join('');
+  }
+
+  let pendingNachweise = [];
+
+  function fieldRows() {
+    const raw = currentRaw();
+    if (!raw) return '';
+    const latest = raw.versions[raw.versions.length - 1];
+    return (raw.columns || []).map((c) => `
+      <div class="field" style="margin-bottom:8px;">
+        <label>${esc(c.label)}</label>
+        <div class="input-wrap"><input type="text" data-ba-field-idx="${c.idx}" value="${esc(latest.values[c.idx] || '')}"></div>
+      </div>`).join('');
+  }
+
+  function renderNachweisList() {
+    const el = document.getElementById('ba-nachweis-list');
+    if (!el) return;
+    el.innerHTML = pendingNachweise.map((n, i) => `
+      <span class="nachweis-chip" data-nachweis-remove="${i}" title="${esc(n.name)}" style="cursor:pointer;">
+        ${esc(n.name)} <span style="opacity:.6;">✕</span>
+      </span>`).join('');
+    el.querySelectorAll('[data-nachweis-remove]').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        pendingNachweise.splice(parseInt(chip.getAttribute('data-nachweis-remove'), 10), 1);
+        renderNachweisList();
+      });
+    });
+  }
+
+  function openBauabweichungModalEl() {
+    const raw = currentRaw();
+    if (!raw || !raw.bauabschnittId) {
+      alert('Dieser Eintrag konnte keinem Bauabschnitt eindeutig zugeordnet werden - Bauabweichung kann nicht erfasst werden.');
+      return;
+    }
+    pendingNachweise = [];
+    const modalOverlay = document.getElementById('modal-overlay');
+    const modalTitle = document.getElementById('modal-title');
+    const modalBody = document.getElementById('modal-body');
+    const modalFooter = document.getElementById('modal-footer');
+    if (!modalOverlay) return;
+
+    modalTitle.textContent = `Bauabweichung erfassen · ${raw.key}`;
+    modalBody.innerHTML = `
+      <div style="font-size:12px; color:var(--gray-500); margin-bottom:10px;">
+        Für Änderungen durch Statik-Freigabe, E-Mail o. ä. Erzeugt eine neue Version (v${raw.versions[raw.versions.length - 1].version + 1}) dieses Eintrags mit dem Vermerk „Umplanung/Braunstrich".
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>Grund / Beschreibung der Bauabweichung <span style="color:var(--red);">*</span></label>
+        <div class="input-wrap"><textarea id="ba-grund" rows="3" placeholder="z. B. Statik hat Auflagerpunkt angepasst, siehe E-Mail vom ..."></textarea></div>
+      </div>
+      <div class="hr"></div>
+      <div class="subheading" style="margin-bottom:6px;">Werte (bei Bedarf anpassen)</div>
+      <div id="ba-field-rows">${fieldRows()}</div>
+      <div class="hr"></div>
+      <div class="field">
+        <label>Nachweis (E-Mail, Statik-PDF, o. ä.)</label>
+        <div class="input-wrap" style="display:flex; gap:8px;">
+          <button type="button" class="matt-tool-btn" id="ba-nachweis-add">Datei hinzufügen</button>
+          <input type="file" id="ba-nachweis-input" style="display:none;">
+        </div>
+        <div id="ba-nachweis-list" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;"></div>
+      </div>
+    `;
+    modalFooter.innerHTML = `
+      <button class="btn-primary" id="ba-save">Bauabweichung speichern</button>
+      <button class="matt-tool-btn" id="ba-cancel">Abbrechen</button>
+    `;
+    modalOverlay.hidden = false;
+    renderNachweisList();
+
+    const fileBtn = document.getElementById('ba-nachweis-add');
+    const fileInput = document.getElementById('ba-nachweis-input');
+    if (fileBtn && fileInput) {
+      fileBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          pendingNachweise.push({ name: file.name, dataUrl: reader.result });
+          renderNachweisList();
+        };
+        reader.readAsDataURL(file);
+        fileInput.value = '';
+      });
+    }
+
+    document.getElementById('ba-cancel').addEventListener('click', () => { modalOverlay.hidden = true; });
+    document.getElementById('ba-save').addEventListener('click', () => {
+      const grundEl = document.getElementById('ba-grund');
+      const grund = grundEl ? grundEl.value.trim() : '';
+      if (!grund) {
+        alert('Bitte einen Grund für die Bauabweichung angeben.');
+        return;
+      }
+      if (!confirm('Wirklich eine neue Version mit dem Vermerk "Umplanung/Braunstrich" für diesen Eintrag anlegen? Dies lässt sich nicht rückgängig machen.')) {
+        return;
+      }
+      const valuesByIdx = {};
+      document.querySelectorAll('[data-ba-field-idx]').forEach((input) => {
+        valuesByIdx[parseInt(input.getAttribute('data-ba-field-idx'), 10)] = input.value;
+      });
+      const result = window.levelbuildAddManualElementVersion(raw.sammlungId, raw.bauabschnittId, raw.rowKey, {
+        valuesByIdx, manualGrund: grund, manualNachweise: pendingNachweise,
+      });
+      modalOverlay.hidden = true;
+      if (!result) {
+        alert('Bauabweichung konnte nicht gespeichert werden - Eintrag wurde in den Daten nicht gefunden.');
+        return;
+      }
+      if (window.levelbuildElementDetailRender) window.levelbuildElementDetailRender();
+    });
+  }
+
+  addBtn.addEventListener('click', openBauabweichungModalEl);
+
+  // Chain onto the existing render hook (rather than overwrite it) so all
+  // drei Element-Detail-IIFEs (Datensätze, Tätigkeitsliste, Bauabweichung)
+  // synchron bleiben, wenn der Router diese Seite (für ein anderes
+  // Element) erneut anzeigt.
+  const prevRender = window.levelbuildElementDetailRender;
+  window.levelbuildElementDetailRender = function () {
+    if (prevRender) prevRender();
+    renderList();
+  };
+  renderList();
+})();
+
+// ======================================================================
+// Element-Detail: Verknüpfungen-Kachel "Dokumente" - spiegelt die
+// gleichnamige Mast-Detail-IIFE oben 1:1, nur gegen den generischen
+// ELEMENT_DOKUMENTE_KEY-Speicher statt MAST_DOKUMENTE_KEY. Eigenständige
+// IIFE, chaint sich zusätzlich in window.levelbuildElementDetailRender ein.
+// Only runs on element-detail.html (guarded by #ed-dok-tile).
+// ======================================================================
+(function () {
+  const tile = document.getElementById('ed-dok-tile');
+  if (!tile) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+  function fmtBytes(n) {
+    n = Number(n) || 0;
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+  function fmtDatumKurz(iso) {
+    const s = String(iso || '').slice(0, 10);
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    return m ? `${m[3]}.${m[2]}.${m[1]}` : s;
+  }
+  function currentRaw() {
+    try { return JSON.parse(sessionStorage.getItem('levelbuild_element_detail') || 'null'); } catch (e) { return null; }
+  }
+
+  const modalOverlay = document.getElementById('modal-overlay');
+  const modalTitle = document.getElementById('modal-title');
+  const modalBody = document.getElementById('modal-body');
+  const modalFooter = document.getElementById('modal-footer');
+
+  function openList() {
+    const raw = currentRaw();
+    if (!raw || !modalOverlay) return;
+    const docs = (typeof getElementDatenpfadDokumente === 'function') ? getElementDatenpfadDokumente(raw.sammlungId, raw.bauabschnittId, raw.rowKey) : [];
+    modalTitle.textContent = `Dokumente · ${raw.key}`;
+    modalBody.innerHTML = docs.length ? docs.map((d) => `
+      <div class="file-row">
+        <span class="file-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </span>
+        <div class="file-meta">
+          <span class="file-name">${esc(d.name)} <span class="file-section-tag">${esc(d.typ)}</span></span>
+          <span class="file-sub">${fmtBytes(d.size)} · hinzugefügt am ${fmtDatumKurz(d.attachedAt)}${d.sourceFile ? ' · aus ' + esc(d.sourceFile) : ''}</span>
+        </div>
+        <a class="icon-btn" title="Herunterladen" href="${d.url}" download="${esc(d.name)}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>
+        </a>
+      </div>`).join('') : '<div class="changelog-empty">Noch keine Dokumente über einen Datenpfad-Import hinterlegt.</div>';
+    modalFooter.innerHTML = `<button type="button" class="matt-tool-btn" id="ed-dok-close">Schließen</button>`;
+    modalOverlay.hidden = false;
+    const closeBtn = document.getElementById('ed-dok-close');
+    if (closeBtn) closeBtn.addEventListener('click', () => { modalOverlay.hidden = true; });
+  }
+  tile.addEventListener('click', openList);
+
+  function renderCount() {
+    const countEl = document.getElementById('ed-dok-count');
+    if (!countEl) return;
+    const raw = currentRaw();
+    const n = raw && typeof getElementDatenpfadDokumente === 'function' ? getElementDatenpfadDokumente(raw.sammlungId, raw.bauabschnittId, raw.rowKey).length : 0;
+    countEl.textContent = `${n} Dokument${n === 1 ? '' : 'e'}`;
+  }
+
+  const prevRenderDok = window.levelbuildElementDetailRender;
+  window.levelbuildElementDetailRender = function () {
+    if (prevRenderDok) prevRenderDok();
+    renderCount();
+  };
+  renderCount();
 })();
 
 // ======================================================================
@@ -9848,7 +13307,7 @@ function btRemoveNode(nodes, id) {
     const countEl = document.getElementById('dok-count');
     if (countEl) countEl.textContent = String(items.length);
     const emptyEl = document.getElementById('dok-empty');
-    const wrapEl = document.querySelector('.dok-table-wrap');
+    const wrapEl = document.querySelector('#page-dokumente .dok-table-wrap');
     if (!all.length) {
       if (emptyEl) emptyEl.hidden = false;
       if (wrapEl) wrapEl.hidden = true;
@@ -9907,5 +13366,1873 @@ function btRemoveNode(nodes, id) {
   }
 
   window.levelbuildOnShowDokumente = render;
+  render();
+})();
+
+// ======================================================================
+// Fotos-Seite: aggregierte Kachel-Galerie über collectAllProjectFotos()
+// (siehe dort für die Zusammenführung der Quellen) - Nutzer-Wunsch: "unter
+// fotos sollen die fotos wie folgt angezeugt werden alle fotos die durch
+// die mastfatel und sonst wie ankommen sollen hier erscheinen". Rein
+// lesend, mit Filter (Standort/Quelle), Sortierung, Suche und einer
+// Lightbox-Ansicht über das gemeinsame #modal-overlay - dieselbe lokale
+// Modal-Helfer-Verdrahtung wie in anderen Seiten-IIFEs (z. B.
+// Fertigstellungsliste), siehe Kommentar dort. Nur aktiv, wenn #fo-grid
+// existiert (Fotos-Seite).
+// ======================================================================
+(function () {
+  const gridEl = document.getElementById('fo-grid');
+  if (!gridEl) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+  function fmtDatum(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!m) return iso ? String(iso) : '';
+    return `${m[3]}.${m[2]}.${m[1]}`;
+  }
+  // addedAt ist entweder ein reines Datum (YYYY-MM-DD, bei Protokoll-Fotos
+  // über das Abschlussdatum der Tätigkeit angenähert - siehe
+  // collectAllProjectFotos) oder ein voller ISO-Zeitstempel (bei Standort-
+  // Fotos, new Date().toISOString() aus der Handy-App) - beide Formen
+  // müssen lesbar dargestellt werden können.
+  function fmtDatumZeitFo(iso) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) return fmtDatum(iso);
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return String(iso);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch (e) { return String(iso); }
+  }
+
+  const modalOverlayFo = document.getElementById('modal-overlay');
+  const modalTitleFo = document.getElementById('modal-title');
+  const modalBodyFo = document.getElementById('modal-body');
+  const modalFooterFo = document.getElementById('modal-footer');
+  function openModalFo(title, bodyHtml, footerHtml) {
+    if (!modalOverlayFo) return;
+    modalTitleFo.textContent = title;
+    modalBodyFo.innerHTML = bodyHtml;
+    modalFooterFo.innerHTML = footerHtml || '';
+    modalOverlayFo.hidden = false;
+  }
+  function closeModalFo() { if (modalOverlayFo) modalOverlayFo.hidden = true; }
+
+  let filterStandort = '';
+  let filterQuelle = '';
+  let sortMode = 'neu';
+  let searchQuery = '';
+
+  function downloadFoto(f) {
+    try {
+      const a = document.createElement('a');
+      a.href = f.dataUrl;
+      a.download = (f.name || 'Foto').replace(/[\\/:*?"<>|]+/g, '_') + '.jpg';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) { /* z. B. in Testumgebungen ohne echte Download-Navigation - unkritisch */ }
+  }
+
+  function openLightbox(f) {
+    const html = `
+      <div class="fo-lightbox">
+        <img src="${f.dataUrl}" alt="${esc(f.name || 'Foto')}">
+        <div class="fo-lightbox-info">
+          <div class="fzl-evt-row"><div class="fzl-evt-label">Standort</div><div class="fzl-evt-value">${esc(f.mastLabel || '–')}</div></div>
+          <div class="fzl-evt-row"><div class="fzl-evt-label">Quelle</div><div class="fzl-evt-value">${esc(f.quelleLabel || '–')}</div></div>
+          <div class="fzl-evt-row"><div class="fzl-evt-label">Datum</div><div class="fzl-evt-value">${f.addedAt ? esc(fmtDatumZeitFo(f.addedAt)) : '<span class="changelog-empty" style="padding:0; display:inline-block;">nicht erfasst</span>'}</div></div>
+          ${f.protokollName ? `<div class="fzl-evt-row"><div class="fzl-evt-label">Protokoll</div><div class="fzl-evt-value">${esc(f.protokollName)}</div></div>` : ''}
+          ${f.taskTitel ? `<div class="fzl-evt-row"><div class="fzl-evt-label">Tätigkeit</div><div class="fzl-evt-value">${esc(f.taskTitel)}</div></div>` : ''}
+        </div>
+      </div>`;
+    openModalFo(f.name || 'Foto', html,
+      '<button type="button" class="matt-tool-btn" id="fo-lb-download">Herunterladen</button>' +
+      '<button type="button" class="matt-tool-btn" id="fo-lb-close">Schließen</button>');
+    const dl = document.getElementById('fo-lb-download');
+    if (dl) dl.addEventListener('click', () => downloadFoto(f));
+    const cl = document.getElementById('fo-lb-close');
+    if (cl) cl.addEventListener('click', closeModalFo);
+  }
+
+  // Standort-Filter-Dropdown wird aus den tatsächlich vorkommenden Fotos
+  // gespeist (nicht aus allen Masten der Masttafel) - ein Standort ohne
+  // ein einziges Foto würde sonst nur eine leere Auswahl erzeugen.
+  function populateStandortFilter(fotos) {
+    const sel = document.getElementById('fo-filter-standort');
+    if (!sel) return;
+    const distinct = new Map();
+    fotos.forEach((f) => { if (f.mastKey && !distinct.has(f.mastKey)) distinct.set(f.mastKey, f.mastLabel); });
+    const sorted = Array.from(distinct.entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'de', { numeric: true }));
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Alle Standorte</option>' + sorted.map(([key, label]) => `<option value="${esc(key)}">${esc(label)}</option>`).join('');
+    if (sorted.some(([key]) => key === current)) sel.value = current;
+  }
+
+  function render() {
+    const crumbEl = document.getElementById('fo-crumb-projekt');
+    if (crumbEl) crumbEl.textContent = currentProjectLabel();
+
+    const all = (typeof collectAllProjectFotos === 'function') ? collectAllProjectFotos() : [];
+    populateStandortFilter(all);
+
+    let items = all.filter((f) => {
+      if (filterStandort && f.mastKey !== filterStandort) return false;
+      if (filterQuelle && f.quelle !== filterQuelle) return false;
+      if (searchQuery) {
+        const hay = [f.mastLabel, f.taskTitel, f.protokollName, f.name].filter(Boolean).join(' ').toLowerCase();
+        if (!hay.includes(searchQuery)) return false;
+      }
+      return true;
+    });
+
+    items.sort((a, b) => {
+      if (sortMode === 'standort') return String(a.mastLabel || '').localeCompare(String(b.mastLabel || ''), 'de', { numeric: true });
+      const da = String(a.addedAt || '');
+      const db = String(b.addedAt || '');
+      return sortMode === 'alt' ? da.localeCompare(db) : db.localeCompare(da);
+    });
+
+    const countEl = document.getElementById('fo-count');
+    if (countEl) countEl.textContent = String(items.length);
+    const emptyEl = document.getElementById('fo-empty');
+
+    if (!all.length) {
+      if (emptyEl) { emptyEl.hidden = false; emptyEl.textContent = 'Noch keine Fotos in diesem Projekt - Fotos entstehen in der Handy-App über Mast-Detail › Fotos oder beim Ausfüllen eines Protokolls mit einem Foto-Baustein.'; }
+      gridEl.innerHTML = '';
+      return;
+    }
+    if (!items.length) {
+      if (emptyEl) { emptyEl.hidden = false; emptyEl.textContent = 'Keine Fotos entsprechen der aktuellen Filterung/Suche.'; }
+      gridEl.innerHTML = '';
+      return;
+    }
+    if (emptyEl) emptyEl.hidden = true;
+
+    gridEl.innerHTML = items.map((f) => `
+      <div class="fo-card" data-fo-id="${esc(f.id)}">
+        <div class="fo-thumb"><img src="${f.dataUrl}" alt="${esc(f.name || 'Foto')}" loading="lazy"></div>
+        <div class="fo-meta">
+          <span class="fo-meta-date">${f.addedAt ? esc(fmtDatumZeitFo(f.addedAt)) : '–'}</span>
+          <span class="fo-meta-tag fo-meta-tag-${esc(f.quelle)}">${esc(f.quelleLabel)}</span>
+        </div>
+        <div class="fo-meta-standort">${esc(f.mastLabel || '–')}</div>
+      </div>`).join('');
+
+    gridEl.querySelectorAll('[data-fo-id]').forEach((card) => {
+      card.addEventListener('click', () => {
+        const f = items.find((x) => x.id === card.getAttribute('data-fo-id'));
+        if (f) openLightbox(f);
+      });
+    });
+  }
+
+  const standortSel = document.getElementById('fo-filter-standort');
+  if (standortSel) standortSel.addEventListener('change', () => { filterStandort = standortSel.value; render(); });
+  const quelleSel = document.getElementById('fo-filter-quelle');
+  if (quelleSel) quelleSel.addEventListener('change', () => { filterQuelle = quelleSel.value; render(); });
+  const sortSel = document.getElementById('fo-sort');
+  if (sortSel) sortSel.addEventListener('change', () => { sortMode = sortSel.value; render(); });
+  const searchInput = document.getElementById('fo-search');
+  if (searchInput) searchInput.addEventListener('input', () => { searchQuery = searchInput.value.trim().toLowerCase(); render(); });
+  const clearBtn = document.getElementById('fo-clear-filters');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      filterStandort = '';
+      filterQuelle = '';
+      sortMode = 'neu';
+      searchQuery = '';
+      if (standortSel) standortSel.value = '';
+      if (quelleSel) quelleSel.value = '';
+      if (sortSel) sortSel.value = 'neu';
+      if (searchInput) searchInput.value = '';
+      render();
+    });
+  }
+
+  window.levelbuildOnShowFotos = render;
+  render();
+})();
+
+// ======================================================================
+// Elemente: Nutzer-Wunsch: "der ereich für den Masttafel Infport soll in
+// einem Übergeordneten Bereich namens Elemente geschoben werden. Die
+// Masttafel selber ist eine Elementensammlung, Es muss eine Wahl geben z.B.
+// Elementensammlung Masttafel, Schweißliste, Weichen/Schwellen Liste,
+// Kabeltiefbau Elemente u.s.w. Alle Logiken werden auch auf diese Anderen
+// Elemente Gezogen." - Schritt 1 (siehe Kommentar bei
+// ELEMENTENSAMMLUNGEN_KEY weiter oben für die genaue Abgrenzung): Masttafel
+// bleibt unangetastet, wird hier nur als Eintrag in einer Auswahl geführt
+// ("Zur Masttafel-Ansicht" öffnet die bestehende, unveränderte Übersicht-
+// Seite mit bereits ausgeklappter Masttafel). Zusätzliche, frei benannte
+// Elementensammlungen bekommen eine eigene, generische Tabellen-Ansicht mit
+// xlsx-Import + derselben Versionierung wie die Masttafel. Nur aktiv, wenn
+// #el-content existiert (Elemente-Seite).
+// ======================================================================
+(function () {
+  const contentEl = document.getElementById('el-content');
+  if (!contentEl) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+  function fmtDatumZeitEl(iso) {
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return String(iso || '');
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch (e) { return String(iso || ''); }
+  }
+  // Wie fmtDatumZeitEl, aber ohne Uhrzeit - für die Datei-Zeile im
+  // "Allgemein"-Kopf, exakt im selben Format wie die Masttafel
+  // (formatDate() in der Masttafel-IIFE: "Eingelesen am DD.MM.YYYY").
+  function fmtDatumEl(iso) {
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return String(iso || '');
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
+    } catch (e) { return String(iso || ''); }
+  }
+
+  // Nutzer-Wunsch (Folgeturn 4): "Es muss Klick sein und dann öffnet sich
+  // die Elementensammlung ... es wäre besser wenn man unter Elemente nur die
+  // Namen der Elementliste sieht ... Erst wenn ich auf den Namen der Liste
+  // dann klicke öffnet sich das Fenster" - ersetzt das bisherige Dropdown
+  // (.el-sammlung-switcher) durch eine echte Liste: die Elemente-Seite
+  // landet immer zuerst auf der Übersichtsliste aller Sammlungen (Masttafel
+  // steht dort schon fest drin), erst ein Klick auf einen Namen öffnet die
+  // Detailansicht mit Import/Bauabschnitten/Zoom/Spalten/Änderungsbericht.
+  // Bewusst NICHT persistiert (kein localStorage) - beim erneuten Aufrufen
+  // der Seite (auch nach einem Seitenwechsel) startet man wieder auf der
+  // Liste, exakt wie beschrieben.
+  let elView = 'list';
+  let elActiveId = null;
+  // Mehrfachauswahl (Löschen / Tätigkeitsliste zuordnen) in der generischen
+  // Sammlungs-Tabelle - wie elView/elActiveId bewusst nicht persistiert.
+  // elSelectedKeys hält NORMALISIERTE Schlüssel (esNormalize), analog zu
+  // MT.selectedKeys in der Masttafel-IIFE. elSelectionSammlungId sorgt
+  // dafür, dass eine Auswahl beim Wechsel zu einer anderen Sammlung
+  // zurückgesetzt wird (sonst könnten Schlüssel einer fremden Sammlung
+  // "ausgewählt" bleiben).
+  let elSelectedKeys = new Set();
+  let elSelectionSammlungId = null;
+
+  function elListRowSubtitle(s) {
+    if (s.type === 'masttafel') return 'Fest eingebaut · Mastdaten (xlsx/PDF-Import)';
+    const map = loadElementDaten();
+    const entry = map[s.id];
+    let rowCount = 0;
+    if (entry) Object.values(entry.sections || {}).forEach((sec) => { rowCount += (sec.rowsByKey || []).length; });
+    const colInfo = (s.columns || []).length ? `${s.columns.length} Spalten` : 'kein Format';
+    return `${colInfo} · ${rowCount} Zeile${rowCount === 1 ? '' : 'n'} importiert`;
+  }
+
+  function elListRowHtml(s) {
+    return `
+      <div class="el-sammlung-row" data-el-open="${esc(s.id)}">
+        <span class="el-sammlung-row-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        </span>
+        <span class="el-sammlung-row-main">
+          <span class="el-sammlung-row-name">${esc(s.name)}${s.builtin ? ' <span class="changelog-empty" style="padding:0; display:inline;">(fest)</span>' : ''}</span>
+          <span class="el-sammlung-row-sub">${elListRowSubtitle(s)}</span>
+        </span>
+        <span class="chev-mini-wrap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg>
+        </span>
+      </div>`;
+  }
+
+  function renderListView(sammlungen) {
+    contentEl.innerHTML = `<div class="el-sammlung-list">${sammlungen.map((s) => elListRowHtml(s)).join('')}</div>`;
+    contentEl.querySelectorAll('[data-el-open]').forEach((row) => {
+      row.addEventListener('click', () => {
+        elActiveId = row.getAttribute('data-el-open');
+        elView = 'detail';
+        render();
+      });
+    });
+  }
+
+  // Nutzer-Wunsch (Folgeturn 5): "wenn man auf Masttafel klickt will ich
+  // wirklich das sich diese Maske hier öffnet" - der reale Masttafel-Block
+  // (#overview-expanded, physisch von der Übersicht-Seite hierher verschoben,
+  // siehe levelbuild.html) wird nur noch ein-/ausgeblendet, NIE mehr per
+  // innerHTML neu gebaut - dadurch bleibt die riesige, unveränderte
+  // Masttafel-IIFE in app.js komplett unangetastet und funktionsfähig.
+  function showMasttafelPanel() {
+    if (contentEl) contentEl.innerHTML = '';
+    const wrap = document.getElementById('overview-expanded');
+    if (wrap) wrap.style.display = 'block';
+    // Aktualisiert Projektwechsel-Erkennung, Bauabschnitt-Liste und die
+    // Sticky-Spalten-Offsets (die während display:none als 0 gemessen
+    // würden) - dieselbe Aktualisierung, die früher beim Aufruf der
+    // Übersicht-Seite lief.
+    if (window.levelbuildOnShowUebersicht) window.levelbuildOnShowUebersicht();
+  }
+  function hideMasttafelPanel() {
+    const wrap = document.getElementById('overview-expanded');
+    if (wrap) wrap.style.display = 'none';
+  }
+
+  // Nutzer-Wunsch: "die Maske eines Elementes muss immer so aussehen wie die
+  // Maske der Masttafel" - dieselben Bausteine wie im Masttafel-Toolbar
+  // (Bauabschnitt-Segmentumschalter oben links, Zoom + Spalten-Konfiguration
+  // im matt-toolbar), inkl. einer "Alle Bauabschnitte anzeigen"-Sammelsicht
+  // (dort ist der Import bewusst gesperrt, exakt wie bei der Masttafel, da
+  // ein Import ja genau einem Bauabschnitt zugeordnet werden muss).
+  function activeBauabschnittFor(entry, bas) {
+    if (!bas.length) return null;
+    if (entry.activeBauabschnittId === '__all__') return '__all__';
+    if (entry.activeBauabschnittId && bas.some((b) => b.id === entry.activeBauabschnittId)) return entry.activeBauabschnittId;
+    return bas[0].id;
+  }
+
+  // Der Bauabschnitt-Umschalter wird - anders als z. B. der Masttafel-eigene
+  // .ba-switcher, der fest im statischen HTML steht - bei jedem render() neu
+  // ins #el-content eingefügt. Das Öffnen/Schließen ist im übrigen Code nur
+  // EINMALIG beim Skript-Start für die zu diesem Zeitpunkt bereits
+  // vorhandenen [data-toggle-segment-menu]-Elemente verdrahtet, würde also
+  // für diesen dynamisch erzeugten Umschalter nicht greifen - deshalb hier
+  // separat verdrahtet.
+  function wireDynamicSegmentToggle(root) {
+    root.querySelectorAll('[data-toggle-segment-menu]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const menu = btn.nextElementSibling;
+        if (!menu) return;
+        const isOpen = !menu.hasAttribute('hidden');
+        document.querySelectorAll('.segment-menu').forEach((m) => m.setAttribute('hidden', ''));
+        if (!isOpen) menu.removeAttribute('hidden');
+      });
+    });
+  }
+
+  // Wie das einmalige, globale ".panel-header"-Klick-Handling (app.js Zeile
+  // ~27) bzw. die globale ".dropzone"-Drag-Feedback-Verdrahtung (Zeile
+  // ~266) - beide greifen nur bei Elementen, die schon beim Skript-Start im
+  // DOM standen. Der "Allgemein"-Kopf + das Tabellen-Panel der generischen
+  // Elementensammlungen werden aber bei jedem render() neu per innerHTML
+  // gebaut, brauchen also dieselbe Logik hier noch einmal, lokal verdrahtet.
+  function wireDynamicPanelToggle(root) {
+    root.querySelectorAll('.panel-header').forEach((header) => {
+      header.addEventListener('click', (e) => {
+        if (e.target.closest('[data-toggle-segment-menu]') || e.target.closest('.segment-menu')) return;
+        const panel = header.closest('.panel');
+        if (panel) panel.classList.toggle('collapsed');
+      });
+    });
+  }
+
+  function wireDynamicDropzones(root, onFile) {
+    root.querySelectorAll('[data-el-import-trigger]').forEach((zone) => {
+      const fileInput = root.querySelector('#el-file-input');
+      zone.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (!fileInput) return;
+        fileInput.value = '';
+        fileInput.click();
+      });
+      ['dragenter', 'dragover'].forEach((evt) => {
+        zone.addEventListener(evt, (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+      });
+      ['dragleave'].forEach((evt) => {
+        zone.addEventListener(evt, (e) => { e.preventDefault(); zone.classList.remove('drag-over'); });
+      });
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (file) onFile(file);
+      });
+    });
+  }
+
+  function renderBaSwitcher(sammlungId, bas, activeBa) {
+    const sw = contentEl.querySelector('.el-ba-switcher');
+    if (!sw) return;
+    const label = sw.querySelector('.segment-current');
+    const activeName = activeBa === '__all__' ? 'Alle Bauabschnitte anzeigen' : ((bas.find((b) => b.id === activeBa) || {}).name || 'Bauabschnitt');
+    if (label) label.textContent = activeName;
+    const menu = sw.querySelector('.segment-menu');
+    if (!menu) return;
+    const items = bas.concat([{ id: '__all__', name: 'Alle Bauabschnitte anzeigen' }]);
+    menu.innerHTML = items.map((it) =>
+      `<div class="segment-menu-item${it.id === activeBa ? ' active' : ''}" data-el-ba="${esc(it.id)}">${esc(it.name)}</div>`
+    ).join('');
+    menu.querySelectorAll('[data-el-ba]').forEach((item) => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const map = loadElementDaten();
+        const entry = map[sammlungId] || { activeBauabschnittId: null, zoom: 100, hiddenCols: [], sections: {} };
+        entry.activeBauabschnittId = item.getAttribute('data-el-ba');
+        map[sammlungId] = entry;
+        saveElementDaten(map);
+        menu.setAttribute('hidden', '');
+        // Zeilen (und damit auch die zugehörigen Schlüssel) wechseln mit dem
+        // Bauabschnitt komplett - eine bestehende Auswahl gehört sonst zu
+        // Zeilen, die gar nicht mehr angezeigt werden.
+        elSelectedKeys = new Set();
+        render();
+      });
+    });
+  }
+
+  function adjustZoom(sammlungId, delta) {
+    const map = loadElementDaten();
+    const entry = map[sammlungId] || { activeBauabschnittId: null, zoom: 100, hiddenCols: [], sections: {} };
+    entry.zoom = Math.max(50, Math.min(200, (entry.zoom || 100) + delta));
+    map[sammlungId] = entry;
+    saveElementDaten(map);
+    render();
+  }
+
+  // Nutzer-Wunsch (Folgeturn 11): "Die Versionslogic fehlt noch" - Umschalter
+  // für "Alle Versionen anzeigen", je Sammlung gespeichert (analog zu Zoom
+  // oben), spiegelt Masttafel's MT.showAllVersions-Toggle (matt-allversions-switch).
+  function toggleShowAllVersionsEl(sammlungId) {
+    const map = loadElementDaten();
+    const entry = map[sammlungId] || { activeBauabschnittId: null, zoom: 100, hiddenCols: [], sections: {} };
+    entry.showAllVersions = !entry.showAllVersions;
+    map[sammlungId] = entry;
+    saveElementDaten(map);
+    render();
+  }
+
+  const BA_SWITCHER_ICON_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1.03H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1.03H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1.03z"/></svg>';
+
+  // Nutzer-Wunsch (Folgeturn 6): "die anderen Listen sollen genau so eine
+  // Maske haben ... auch mit der Versionierungslogik" - konkret zunächst der
+  // "Kopf" der Masttafel-Maske: ein "Allgemein"-Panel (Datei-Dropzone +
+  // Dateiliste links, "Änderungen"-Zusammenfassung + Änderungsbericht-Link
+  // rechts) über einem zweiten Panel mit Bauabschnitt-Switcher/Toolbar/
+  // Tabelle - exakt dieselben CSS-Klassen wie die echte, statische
+  // Masttafel-Maske (siehe #overview-expanded in levelbuild.html), nur mit
+  // dynamischen Daten aus dem generischen Elementensammlungs-Speicher.
+  function fileRowHtml(f) {
+    return `
+      <div class="file-row">
+        <span class="file-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+        </span>
+        <div class="file-meta">
+          <span class="file-name">${esc(f.name)}</span>
+          <span class="file-sub">Eingelesen am ${esc(fmtDatumEl(f.importedAt))} · Wajih Tfaili</span>
+        </div>
+        ${f.url ? `<a class="icon-btn" title="Herunterladen" href="${f.url}" download="${esc(f.name)}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>
+        </a>` : ''}
+        <button type="button" class="icon-btn" title="Datei entfernen" data-el-delete-file="${esc(f.id)}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </button>
+      </div>`;
+  }
+
+  // Nutzer-Wunsch (Folgeturn 11): "Die Versionslogic fehlt noch" - eigene
+  // Kopie von Masttafel's computeChangedColsMap() (siehe dort), verwendet
+  // esNormalize statt normalize, aber identische Logik: vergleicht jede
+  // Version mit ihrer unmittelbaren Nachfolge-Version und liefert je
+  // Versionsnummer die Menge der abweichenden Spalten-Indizes zurück - nur
+  // gebraucht, wenn "Alle Versionen anzeigen" aktiv ist.
+  function computeChangedColsMapEl(versions) {
+    const map = new Map();
+    versions.forEach((v) => map.set(v.version, new Set()));
+    for (let i = 0; i < versions.length - 1; i++) {
+      const a = versions[i], b = versions[i + 1];
+      for (let c = 0; c < a.values.length; c++) {
+        if (esNormalize(a.values[c]) !== esNormalize(b.values[c])) {
+          map.get(a.version).add(c);
+          map.get(b.version).add(c);
+        }
+      }
+    }
+    return map;
+  }
+
+  function genericSammlungHtml(sammlung) {
+    const map = loadElementDaten();
+    const entry = map[sammlung.id] || { activeBauabschnittId: null, zoom: 100, hiddenCols: [], sections: {} };
+    const bas = loadBauabschnitte();
+    const cols = sammlung.columns || [];
+
+    if (!bas.length) {
+      return `
+        <div class="el-toolbar">
+          <button type="button" class="link-action" id="el-rename-sammlung">Umbenennen</button>
+          <button type="button" class="link-action" id="el-delete-sammlung" style="color:var(--red);">Sammlung löschen</button>
+        </div>
+        <div class="changelog-empty">Es sind noch keine Bauabschnitte angelegt. Lege zuerst in den Projekteinstellungen mindestens einen Bauabschnitt an, um Daten für "${esc(sammlung.name)}" zu importieren.</div>`;
+    }
+    if (!cols.length) {
+      return `
+        <div class="el-toolbar">
+          <button type="button" class="link-action" id="el-rename-sammlung">Umbenennen</button>
+          <button type="button" class="link-action" id="el-delete-sammlung" style="color:var(--red);">Sammlung löschen</button>
+        </div>
+        <div class="changelog-empty">Diese Sammlung hat kein festes Format hinterlegt (die zugrundeliegende Elementenvorlage fehlt oder hat kein Format). Bitte über Projekte → Vorlagen → Elementenvorlagen prüfen.</div>`;
+    }
+
+    const activeBa = activeBauabschnittFor(entry, bas);
+    const isAll = activeBa === '__all__';
+    const zoom = entry.zoom || 100;
+    const hiddenCols = entry.hiddenCols || [];
+    // Nutzer-Wunsch (Folgeturn 11): "Die Versionslogic fehlt noch" - spiegelt
+    // Masttafel's MT.showAllVersions-Umschalter (siehe matt-allversions-switch)
+    // 1:1 für die generische Tabelle, hier je Sammlung statt je Masttafel
+    // gespeichert (analog zu zoom/hiddenCols).
+    const showAllVersions = !!entry.showAllVersions;
+    const sec = (!isAll && activeBa) ? (entry.sections[activeBa] || { rowsByKey: [], changesLog: [], files: [] }) : null;
+
+    let rows = [];
+    if (isAll) {
+      bas.forEach((b) => {
+        const s = entry.sections[b.id];
+        if (!s) return;
+        (s.rowsByKey || []).forEach((pair) => rows.push(Object.assign({ baName: b.name, baId: b.id }, pair[1])));
+      });
+    } else {
+      rows = ((sec && sec.rowsByKey) || []).map((pair) => pair[1]);
+    }
+    rows.sort((a, b) => String(a.displayKey || '').localeCompare(String(b.displayKey || ''), 'de', { numeric: true }));
+    const visibleCols = cols.filter((c) => !hiddenCols.includes(c.idx));
+    const changesLog = sec ? (sec.changesLog || []) : [];
+    const changesLogCount = changesLog.length;
+    const files = sec ? (sec.files || []) : [];
+
+    // ---------- "Allgemein"-Kopf: Datei-Dropzone + Dateiliste + Änderungen ----------
+    const changesSummaryHtml = changesLogCount
+      ? `<div class="changelog-summary">${new Set(changesLog.map((c) => c.key)).size} Bauwerk${new Set(changesLog.map((c) => c.key)).size === 1 ? '' : 'e'} mit neuer Version · ${changesLogCount} geänderte Werte</div>`
+      : `<div class="changelog-empty">Noch keine Änderungen vorhanden</div>`;
+    const dropzoneDisabledAttr = isAll ? ' style="opacity:.5; pointer-events:none;" title="Erst einen Bauabschnitt auswählen, um zu importieren"' : '';
+
+    const allgemeinPanelHtml = `
+      <div class="panel el-head-panel">
+        <div class="panel-header">
+          <span>Allgemein</span>
+          <div class="panel-actions">
+            <span class="icon-btn" title="Bearbeiten">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+            </span>
+            <span class="chev" data-panel-toggle>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+            </span>
+          </div>
+        </div>
+        <div class="panel-body two-col">
+          <div class="subcol">
+            <div class="subheading">${esc(sammlung.name)} Datei</div>
+            <div class="masttafel-empty dropzone small" id="el-datei-empty" data-el-import-trigger${dropzoneDisabledAttr}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12"/><polyline points="7 8 12 3 17 8"/><path d="M5 21h14"/></svg>
+              <span>Datei hierher ziehen</span>
+              <span class="hint">oder klicken zum Hochladen – auch für weitere Versionen</span>
+            </div>
+            <input type="file" id="el-file-input" accept=".xlsx,.xls" hidden>
+            <div class="file-list" id="el-file-list">${files.map(fileRowHtml).join('')}</div>
+          </div>
+          <div class="subcol">
+            <div class="subheading">Änderungen</div>
+            <div id="el-changes-summary">${changesSummaryHtml}</div>
+            <button type="button" class="link-action" id="el-open-report" ${changesLogCount ? '' : 'disabled'}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+              Änderungsbericht öffnen
+            </button>
+          </div>
+        </div>
+      </div>`;
+
+    // ---------- Tabellen-Panel (Bauabschnitt-Switcher im Kopf, wie Masttafel) ----------
+    const baSwitcherHtml = `
+      <div class="segment-switcher el-ba-switcher">
+        <button class="segment-switcher-btn" type="button" data-toggle-segment-menu>
+          ${BA_SWITCHER_ICON_SVG}
+          <span class="segment-current">Bauabschnitt</span>
+          <svg class="chev-mini" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="segment-menu" hidden></div>
+      </div>`;
+
+    const toolbarHtml = `
+      <div class="matt-toolbar">
+        <div class="matt-toolbar-group">
+          <button class="matt-tool-btn" id="el-zoom-out" title="Verkleinern">−</button>
+          <span class="matt-zoom-label" id="el-zoom-label">${zoom}%</span>
+          <button class="matt-tool-btn" id="el-zoom-in" title="Vergrößern">+</button>
+        </div>
+        <div class="matt-toolbar-group">
+          <button class="matt-tool-btn" id="el-open-columns">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="10.5" y="3" width="7" height="18" rx="1"/><rect x="18" y="3" width="3" height="18" rx="1"/></svg>
+            Spalten
+          </button>
+        </div>
+        <div class="matt-toolbar-group">
+          <label class="matt-toggle-label">
+            <span class="switch small${showAllVersions ? ' on' : ''}" id="el-allversions-switch"><span class="knob"></span></span>
+            Alle Versionen anzeigen
+          </label>
+        </div>
+        <div class="matt-toolbar-group matt-selection-group" id="el-selection-group" hidden>
+          <span class="matt-selection-status" id="el-selection-status"></span>
+          <button class="matt-tool-btn" id="el-assign-tl-selected">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Tätigkeitsliste zuordnen
+          </button>
+          <button class="matt-tool-btn matt-tool-btn-danger" id="el-delete-selected">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            Löschen
+          </button>
+        </div>
+        <div class="matt-toolbar-spacer"></div>
+        <div class="matt-toolbar-group">
+          <button type="button" class="matt-tool-btn" id="el-open-report-2" ${changesLogCount ? '' : 'disabled'}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+            Änderungsbericht
+          </button>
+          <button type="button" class="link-action" id="el-rename-sammlung">Umbenennen</button>
+          <button type="button" class="link-action" id="el-delete-sammlung" style="color:var(--red);">Sammlung löschen</button>
+        </div>
+      </div>`;
+
+    // Mehrfachauswahl-Spalte nur außerhalb der "Alle Bauabschnitte"-
+    // Sammelsicht (wie beim Import) - sonst wäre nicht eindeutig, aus
+    // welchem Bauabschnitt eine ausgewählte Zeile stammt.
+    const selColHtml = !isAll ? '<th class="sel-col" rowspan="1"><input type="checkbox" id="el-select-all" title="Alle auswählen"></th>' : '';
+    const theadHtml = `<tr>${selColHtml}${isAll ? '<th>Bauabschnitt</th>' : ''}${visibleCols.map((c) => `<th>${esc(c.label)}</th>`).join('')}</tr>`;
+    // Nutzer-Wunsch (Folgeturn 11): "Die Versionslogic fehlt noch" - spiegelt
+    // Masttafel's buildTbodyHtml() (siehe dort): im Standard nur die letzte
+    // Version je Eintrag, bei aktivem "Alle Versionen anzeigen" eine Zeile
+    // je Version (neueste zuerst) mit rot hervorgehobenen geänderten
+    // Zellen (computeChangedColsMapEl) und abgeblasster ".row-historical"-
+    // Optik für ältere Versionen - exakt wie bei der Masttafel-Tabelle.
+    const tbodyHtml = rows.map((rowEntry) => {
+      const versions = rowEntry.versions;
+      const latest = versions[versions.length - 1];
+      const hasHistory = versions.length > 1;
+      const baCell = isAll ? `<td>${esc(rowEntry.baName || '')}</td>` : '';
+      const rowKeyAttr = esc(esNormalize(rowEntry.displayKey));
+      const rowBaAttr = esc(rowEntry.baId || activeBa || '');
+      const selected = elSelectedKeys.has(esNormalize(rowEntry.displayKey));
+
+      function selCellHtml() {
+        return !isAll ? `<td class="sel-col"><input type="checkbox" data-el-select-key="${esc(rowEntry.displayKey)}" ${selected ? 'checked' : ''}></td>` : '';
+      }
+      function rowHtml(v, opts) {
+        opts = opts || {};
+        const vBadge = hasHistory ? `<span class="ver-badge${opts.isLatest ? ' current' : ''}">v${v.version}${opts.isLatest ? ' (aktuell)' : ''}</span>` : '';
+        const cellsHtml = visibleCols.map((c, ci) => {
+          const changed = opts.changedCols && opts.changedCols.has(c.idx);
+          return `<td${changed ? ' class="cell-changed"' : ''}>${esc(v.values[c.idx])}${ci === 0 ? vBadge : ''}</td>`;
+        }).join('');
+        const rowClass = 'dok-table-row-clickable' + (opts.historical ? ' row-historical' : '');
+        // data-el-row-version markiert, welche konkrete Version angeklickt
+        // wurde - die Element-Detail-Seite öffnet dann direkt diese Version
+        // (statt immer nur die aktuelle), siehe openElementDetailPage().
+        return `<tr class="${rowClass}" data-el-row-key="${rowKeyAttr}" data-el-row-ba="${rowBaAttr}" data-el-row-version="${v.version}">${selCellHtml()}${baCell}${cellsHtml}</tr>`;
+      }
+
+      if (!showAllVersions) {
+        return rowHtml(latest, { isLatest: true });
+      }
+      const changedMap = hasHistory ? computeChangedColsMapEl(versions) : null;
+      let html = '';
+      for (let i = versions.length - 1; i >= 0; i--) {
+        const v = versions[i];
+        const isLatest = v.version === latest.version;
+        html += rowHtml(v, {
+          isLatest,
+          historical: !isLatest,
+          changedCols: changedMap ? changedMap.get(v.version) : null,
+        });
+      }
+      return html;
+    }).join('');
+
+    const tableBodyHtml = rows.length
+      ? `<div class="dok-table-wrap" id="el-table-wrap" style="font-size:${(zoom / 100 * 10.5).toFixed(2)}px;">
+          <table class="dok-table">
+            <thead>${theadHtml}</thead>
+            <tbody>${tbodyHtml}</tbody>
+          </table>
+        </div>`
+      : `<div class="masttafel-empty dropzone large" id="el-empty-expanded" data-el-import-trigger${dropzoneDisabledAttr}>
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+          <span>${isAll ? 'Noch keine Daten in irgendeinem Bauabschnitt' : 'Noch keine Daten vorhanden'}</span>
+          <span class="hint">${isAll ? '' : 'Datei hierher ziehen oder klicken, um ' + esc(sammlung.name) + '-Daten einzulesen'}</span>
+        </div>`;
+
+    const tabelPanelHtml = `
+      <div class="panel el-table-panel" style="margin-top:16px;">
+        <div class="panel-header">
+          <span class="panel-header-left">
+            <span>${esc(sammlung.name)}</span>
+            ${baSwitcherHtml}
+          </span>
+          <div class="panel-actions">
+            <span class="icon-btn" title="Bearbeiten">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+            </span>
+            <span class="chev" data-panel-toggle>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+            </span>
+          </div>
+        </div>
+        ${toolbarHtml}
+        <div class="panel-body" style="padding:0;">
+          ${tableBodyHtml}
+        </div>
+      </div>`;
+
+    return allgemeinPanelHtml + tabelPanelHtml;
+  }
+
+  // Nutzer-Wunsch (Folgeturn 9): "jedes Element in einer Liste muss
+  // aufgemacht werden können genau wie wenn ich auf einen Mast klicke" -
+  // spiegelt openMastDetailPage() (siehe Masttafel-IIFE weiter oben) 1:1,
+  // schreibt den Handoff aber unter einem eigenen sessionStorage-Key
+  // ('levelbuild_element_detail'), damit sich Masttafel- und generische
+  // Element-Detailseiten niemals gegenseitig überschreiben können.
+  function openElementDetailPage(sammlung, rowEntry, bauabschnittId, bauabschnittName, initialVersion) {
+    const payload = {
+      sammlungId: sammlung.id,
+      sammlungName: sammlung.name,
+      key: rowEntry.displayKey,
+      rowKey: esNormalize(rowEntry.displayKey),
+      bauabschnittId: bauabschnittId || null,
+      bauabschnittName: bauabschnittName || '–',
+      columns: sammlung.columns || [],
+      versions: rowEntry.versions,
+      projectLabel: currentProjectLabel(),
+      // Nutzer-Wunsch (Folgeturn 11): "Die Versionslogic fehlt noch" - beim
+      // Klick auf eine bestimmte Version in der "Alle Versionen anzeigen"-
+      // Tabelle öffnet die Detailseite direkt bei genau dieser Version
+      // (statt immer nur der aktuellsten), siehe Element-Detail-IIFE.
+      initialVersion: initialVersion || null,
+    };
+    try { sessionStorage.setItem('levelbuild_element_detail', JSON.stringify(payload)); } catch (e) { /* ignore */ }
+    if (window.levelbuildGo) window.levelbuildGo('element-detail');
+  }
+
+  function openColumnsModalEl(sammlungId, cols, hiddenCols) {
+    const rowsHtml = cols.map((c) => `
+      <label class="col-config-row" style="cursor:pointer;">
+        <span style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" data-el-col="${c.idx}" ${hiddenCols.includes(c.idx) ? '' : 'checked'}>
+          ${esc(c.label)}
+        </span>
+      </label>`).join('');
+    openModalEl('Spalten konfigurieren', `<div class="col-config-list">${rowsHtml}</div>`, `
+      <button type="button" class="matt-tool-btn" id="el-cols-cancel">Abbrechen</button>
+      <button type="button" class="btn-primary" id="el-cols-apply">Übernehmen</button>
+    `);
+    document.getElementById('el-cols-cancel').addEventListener('click', closeModalEl);
+    document.getElementById('el-cols-apply').addEventListener('click', () => {
+      const hidden = Array.from(modalBodyEl.querySelectorAll('[data-el-col]')).filter((cb) => !cb.checked).map((cb) => parseInt(cb.getAttribute('data-el-col'), 10));
+      const map = loadElementDaten();
+      const entry = map[sammlungId];
+      if (entry) { entry.hiddenCols = hidden; saveElementDaten(map); }
+      closeModalEl();
+      render();
+    });
+  }
+
+  // Nutzer-Wunsch (Folgeturn 3): Import läuft gegen das feste Format der
+  // Sammlung (sammlung.columns, aus der Elementenvorlage übernommen) statt
+  // gegen eine pro Datei neu erkannte Kopfzeile - siehe parseFixedFormatSheet.
+  // Zeigt nach dem Import dieselbe Art Rückmeldung wie die Masttafel ("X neu,
+  // Y mit Änderungen, Z unverändert"), plus eine Warnung, falls einzelne
+  // erwartete Spalten in der Datei nicht gefunden wurden.
+  function handleImportFile(sammlung, bauabschnittId, file) {
+    if (!file || !sammlung || !bauabschnittId) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bytes = new Uint8Array(evt.target.result);
+        const wb = XLSX.read(bytes, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const parsed = parseFixedFormatSheet(ws, sammlung.columns || []);
+        if (!parsed.rows.length) { alert('Die Datei enthält keine erkennbaren Datenzeilen unter der Kopfzeile.'); return; }
+        // "Datenpfad <Name>"-Spalten sind in parseFixedFormatSheet ohnehin
+        // schon außen vor (es werden nur die in der Vorlage definierten
+        // Spalten übernommen) - hier nur die Pfad-Werte für die Dokumenten-
+        // Auflösung einsammeln, siehe extractDatenpfadRefs weiter oben.
+        const keyColLabel = sammlung.columns && sammlung.columns[0] ? sammlung.columns[0].label : null;
+        const datenpfadRefs = extractDatenpfadRefs(ws, keyColLabel);
+        // url: data-URL (nicht blob:) wie bei der Masttafel (uint8ToBase64Global,
+        // siehe dort) - übersteht das Speichern in localStorage und ist beim
+        // nächsten Laden noch als echter Download-Link nutzbar.
+        const mimeType = file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        const fileMeta = { id: 'ef-' + Date.now().toString(36), name: file.name, importedAt: new Date().toISOString(), url: 'data:' + mimeType + ';base64,' + uint8ToBase64Global(bytes) };
+        const summary = importGenericElementIntoStore(sammlung.id, bauabschnittId, sammlung.columns || [], parsed.rows, fileMeta);
+        render();
+        const summaryMsg = summary.changedKeys > 0
+          ? `${file.name}: ${summary.newKeys} neu, ${summary.changedKeys} mit Änderungen (neue Version), ${summary.unchangedKeys} unverändert.`
+          : `${file.name}: ${summary.newKeys} neu, ${summary.unchangedKeys} unverändert – keine Änderungen erkannt.`;
+        const warnMsg = parsed.missing.length ? `\n\nHinweis: Diese Spalten aus dem festen Format wurden in der Datei nicht gefunden und blieben leer: ${parsed.missing.join(', ')}.` : '';
+        alert(summaryMsg + warnMsg);
+        handleDatenpfadAfterImport(datenpfadRefs, file.name, (rowKeyRaw, docs) => attachElementDatenpfadDokumente(sammlung.id, bauabschnittId, rowKeyRaw, docs));
+      } catch (err) {
+        alert('Datei konnte nicht gelesen werden - bitte eine gültige xlsx-Datei wählen.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // Wie deleteFile() der Masttafel: entfernt nur den Datei-Eintrag aus der
+  // Liste (Re-Download/Nachvollziehbarkeit), lässt bereits eingelesene
+  // Zeilen/Versionen unangetastet.
+  function deleteElFile(sammlungId, bauabschnittId, fileId) {
+    if (!fileId) return;
+    const map = loadElementDaten();
+    const entry = map[sammlungId];
+    const sec = entry && entry.sections[bauabschnittId];
+    if (!sec) return;
+    const f = (sec.files || []).find((x) => x.id === fileId);
+    if (!f) return;
+    if (!window.confirm(`"${f.name}" aus der Dateiliste entfernen? Bereits eingelesene Daten aus dieser Datei bleiben erhalten.`)) return;
+    sec.files = (sec.files || []).filter((x) => x.id !== fileId);
+    saveElementDaten(map);
+    render();
+  }
+
+  // ---------- Änderungsbericht (analog Masttafel, xlsx-Export) ----------
+  function openChangeReportEl(sammlung, bauabschnittId, entry) {
+    const sec = entry.sections[bauabschnittId] || {};
+    const changesLog = sec.changesLog || [];
+    if (!changesLog.length) {
+      openModalEl('Änderungsbericht', '<div class="changelog-empty" style="padding:24px 0;">Noch keine Änderungen vorhanden.</div>', `<button type="button" class="matt-tool-btn" id="el-rep-close">Schließen</button>`);
+      document.getElementById('el-rep-close').addEventListener('click', closeModalEl);
+      return;
+    }
+    const rowsHtml = changesLog.slice().reverse().map((c) => `
+      <tr>
+        <td class="key-col">${esc(c.key)}</td>
+        <td>${esc(c.colLabel)}</td>
+        <td>${c.oldVal ? esc(c.oldVal) : '–'}</td>
+        <td>${c.newVal ? esc(c.newVal) : '–'}</td>
+        <td>v${c.fromVersion} → v${c.toVersion}</td>
+        <td>${esc(fmtDatumZeitEl(c.importedAt))}</td>
+      </tr>`).join('');
+    openModalEl('Änderungsbericht', `
+      <div class="dok-table-wrap" style="max-height:420px;">
+        <table class="dok-table">
+          <thead><tr><th class="key-col">Schlüssel</th><th>Spalte</th><th>Alter Wert</th><th>Neuer Wert</th><th>Version</th><th>Eingelesen am</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    `, `
+      <button type="button" class="matt-tool-btn" id="el-rep-download">Als Excel herunterladen</button>
+      <button type="button" class="matt-tool-btn" id="el-rep-close">Schließen</button>
+    `);
+    document.getElementById('el-rep-close').addEventListener('click', closeModalEl);
+    document.getElementById('el-rep-download').addEventListener('click', () => downloadChangeReportEl(sammlung, changesLog));
+  }
+
+  function downloadChangeReportEl(sammlung, changesLog) {
+    const aoa = [['Schlüssel', 'Spalte', 'Alter Wert', 'Neuer Wert', 'Version', 'Eingelesen am']];
+    changesLog.forEach((c) => {
+      aoa.push([c.key, c.colLabel, c.oldVal, c.newVal, `v${c.fromVersion} -> v${c.toVersion}`, fmtDatumZeitEl(c.importedAt)]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 18 }, { wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 18 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Änderungsbericht');
+    const safeName = String(sammlung.name || 'Elemente').replace(/[^a-z0-9äöüß_-]+/gi, '_');
+    XLSX.writeFile(wb, `Aenderungsbericht_${safeName}.xlsx`);
+  }
+
+  // ---------- Mehrfachauswahl (wie Masttafel: Löschen / Tätigkeitsliste zuordnen) ----------
+  function updateElSelectionToolbar() {
+    const group = document.getElementById('el-selection-group');
+    const status = document.getElementById('el-selection-status');
+    if (!group || !status) return;
+    if (elSelectedKeys.size === 0) { group.hidden = true; return; }
+    group.hidden = false;
+    status.textContent = `${elSelectedKeys.size} ausgewählt`;
+  }
+
+  function wireElSelection(root) {
+    const cbs = Array.from(root.querySelectorAll('[data-el-select-key]'));
+    const selectAll = root.querySelector('#el-select-all');
+    function syncSelectAll() {
+      if (!selectAll) return;
+      selectAll.checked = cbs.length > 0 && cbs.every((cb) => elSelectedKeys.has(esNormalize(cb.getAttribute('data-el-select-key'))));
+      selectAll.indeterminate = !selectAll.checked && cbs.some((cb) => elSelectedKeys.has(esNormalize(cb.getAttribute('data-el-select-key'))));
+    }
+    cbs.forEach((cb) => {
+      cb.addEventListener('change', () => {
+        const key = esNormalize(cb.getAttribute('data-el-select-key'));
+        if (cb.checked) elSelectedKeys.add(key); else elSelectedKeys.delete(key);
+        syncSelectAll();
+        updateElSelectionToolbar();
+      });
+    });
+    if (selectAll) {
+      selectAll.addEventListener('change', () => {
+        cbs.forEach((cb) => {
+          const key = esNormalize(cb.getAttribute('data-el-select-key'));
+          if (selectAll.checked) elSelectedKeys.add(key); else elSelectedKeys.delete(key);
+          cb.checked = selectAll.checked;
+        });
+        updateElSelectionToolbar();
+      });
+    }
+    syncSelectAll();
+    updateElSelectionToolbar();
+  }
+
+  // Wie deleteSelectedBauwerke() der Masttafel: löscht die kompletten
+  // Einträge (alle Versionen) der ausgewählten Zeilen, plus zugehörige
+  // Änderungsbericht-Einträge.
+  function deleteSelectedElRows(sammlungId, bauabschnittId) {
+    if (elSelectedKeys.size === 0) return;
+    const count = elSelectedKeys.size;
+    if (!window.confirm(`${count} Eintrag${count === 1 ? '' : 'e'} wirklich löschen? Das entfernt auch die gesamte Versionshistorie.`)) return;
+    const map = loadElementDaten();
+    const entry = map[sammlungId];
+    const sec = entry && entry.sections[bauabschnittId];
+    if (!sec) return;
+    const rowsByKeyMap = new Map(sec.rowsByKey || []);
+    const displayKeysToDelete = new Set();
+    elSelectedKeys.forEach((key) => {
+      const rowEntry = rowsByKeyMap.get(key);
+      if (rowEntry) displayKeysToDelete.add(rowEntry.displayKey);
+      rowsByKeyMap.delete(key);
+    });
+    sec.rowsByKey = Array.from(rowsByKeyMap.entries());
+    sec.changesLog = (sec.changesLog || []).filter((c) => !displayKeysToDelete.has(c.key));
+    saveElementDaten(map);
+    elSelectedKeys = new Set();
+    render();
+  }
+
+  // Wie openBulkAssignTlModal() der Masttafel (siehe dort), aber generisch:
+  // schreibt in ELEMENT_TL_ASSIGNMENT_KEY/ELEMENT_TL_MANUAL_KEY statt
+  // MAST_TL_ASSIGNMENT_KEY/MAST_TL_MANUAL_KEY, jeweils zusätzlich unter der
+  // aktuellen sammlungId genestet (siehe Datenmodell weiter oben in app.js).
+  function openBulkAssignTlModalEl(sammlungId) {
+    if (elSelectedKeys.size === 0) return;
+    const count = elSelectedKeys.size;
+    const lists = loadTlProjectList().filter((l) => !l.mastKey);
+    openModalEl(`Tätigkeitsliste für ${count} Eintrag${count === 1 ? '' : 'e'} zuordnen`, `
+      <div style="font-size:12px; color:var(--gray-500); margin-bottom:10px;">
+        Bereits bestehende Zuordnungen der ausgewählten Einträge werden dabei überschrieben.
+      </div>
+      <div class="field">
+        <label>Tätigkeitsliste</label>
+        <div class="input-wrap">
+          <select id="el-bulk-tl-select">
+            <option value="">Keine (Zuordnung entfernen)</option>
+            ${lists.map((l) => `<option value="${esc(l.id)}">${esc(l.name)} (${l.tasks.length})</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    `, `
+      <button class="btn-primary" id="el-bulk-tl-save">Zuordnen</button>
+      <button class="matt-tool-btn" id="el-bulk-tl-cancel">Abbrechen</button>
+    `);
+    const cancelBtn = document.getElementById('el-bulk-tl-cancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModalEl);
+    const saveBtn = document.getElementById('el-bulk-tl-save');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        const selId = document.getElementById('el-bulk-tl-select').value;
+        const assignments = loadElementTlAssignments();
+        assignments[sammlungId] = assignments[sammlungId] || {};
+        elSelectedKeys.forEach((key) => {
+          if (selId) assignments[sammlungId][key] = selId; else delete assignments[sammlungId][key];
+        });
+        saveElementTlAssignments(assignments);
+        const manuell = loadElementTlManuell();
+        manuell[sammlungId] = manuell[sammlungId] || {};
+        elSelectedKeys.forEach((key) => { manuell[sammlungId][key] = true; });
+        saveElementTlManuell(manuell);
+        closeModalEl();
+        const gewaehlt = lists.find((l) => l.id === selId);
+        alert(gewaehlt
+          ? `"${gewaehlt.name}" wurde ${count} Eintrag${count === 1 ? '' : 'en'} zugeordnet.`
+          : `Zuordnung für ${count} Eintrag${count === 1 ? '' : 'e'} entfernt.`);
+      });
+    }
+  }
+
+  function renderDetailView(active) {
+    if (active.type === 'masttafel') {
+      showMasttafelPanel();
+      return;
+    }
+    hideMasttafelPanel();
+
+    // Auswahl (Löschen/Tätigkeitsliste zuordnen) gehört zu genau einer
+    // Sammlung - beim Wechsel zu einer anderen Sammlung zurücksetzen, sonst
+    // blieben Schlüssel einer fremden Sammlung "ausgewählt" im Hintergrund.
+    if (elSelectionSammlungId !== active.id) {
+      elSelectedKeys = new Set();
+      elSelectionSammlungId = active.id;
+    }
+
+    const backHtml = `<button type="button" class="link-action el-back-link" id="el-back-to-list">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="15 18 9 12 15 6"/></svg>
+      Zurück zur Übersicht
+    </button>`;
+    const headingHtml = `<div class="subheading" style="margin:10px 0 12px;">${esc(active.name)}</div>`;
+    contentEl.innerHTML = backHtml + headingHtml + genericSammlungHtml(active);
+    wireDynamicSegmentToggle(contentEl);
+    wireDynamicPanelToggle(contentEl);
+
+    const backBtn = document.getElementById('el-back-to-list');
+    if (backBtn) backBtn.addEventListener('click', () => {
+      elView = 'list';
+      elActiveId = null;
+      render();
+    });
+
+    {
+      const map = loadElementDaten();
+      const entry = map[active.id] || { activeBauabschnittId: null, zoom: 100, hiddenCols: [], sections: {} };
+      const bas = loadBauabschnitte();
+      const activeBa = activeBauabschnittFor(entry, bas);
+      if (bas.length) renderBaSwitcher(active.id, bas, activeBa);
+
+      wireElSelection(contentEl);
+      const assignTlBtn = document.getElementById('el-assign-tl-selected');
+      if (assignTlBtn) assignTlBtn.addEventListener('click', () => openBulkAssignTlModalEl(active.id));
+      const deleteSelectedBtn = document.getElementById('el-delete-selected');
+      if (deleteSelectedBtn && activeBa && activeBa !== '__all__') {
+        deleteSelectedBtn.addEventListener('click', () => deleteSelectedElRows(active.id, activeBa));
+      }
+
+      const zoomOutBtn = document.getElementById('el-zoom-out');
+      const zoomInBtn = document.getElementById('el-zoom-in');
+      if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => adjustZoom(active.id, -10));
+      if (zoomInBtn) zoomInBtn.addEventListener('click', () => adjustZoom(active.id, 10));
+
+      const colsBtn = document.getElementById('el-open-columns');
+      if (colsBtn) colsBtn.addEventListener('click', () => {
+        if (!active.columns || !active.columns.length) return;
+        openColumnsModalEl(active.id, active.columns, entry.hiddenCols || []);
+      });
+
+      const allVersionsSwitch = document.getElementById('el-allversions-switch');
+      if (allVersionsSwitch) allVersionsSwitch.addEventListener('click', () => toggleShowAllVersionsEl(active.id));
+
+      // Wie bei der Masttafel (matt-open-report / matt-open-report-2) gibt es
+      // denselben Änderungsbericht-Auslöser zweimal (Allgemein-Kopf + Toolbar).
+      const reportBtn = document.getElementById('el-open-report');
+      const reportBtn2 = document.getElementById('el-open-report-2');
+      const openReport = () => {
+        if (!activeBa || activeBa === '__all__') return;
+        openChangeReportEl(active, activeBa, entry);
+      };
+      if (reportBtn) reportBtn.addEventListener('click', openReport);
+      if (reportBtn2) reportBtn2.addEventListener('click', openReport);
+
+      const fileInput = document.getElementById('el-file-input');
+      if (fileInput && activeBa && activeBa !== '__all__') {
+        wireDynamicDropzones(contentEl, (file) => handleImportFile(active, activeBa, file));
+        fileInput.addEventListener('change', () => {
+          const file = fileInput.files && fileInput.files[0];
+          if (file) handleImportFile(active, activeBa, file);
+          fileInput.value = '';
+        });
+      }
+
+      contentEl.querySelectorAll('[data-el-delete-file]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (!activeBa || activeBa === '__all__') return;
+          deleteElFile(active.id, activeBa, btn.getAttribute('data-el-delete-file'));
+        });
+      });
+
+      // Nutzer-Wunsch (Folgeturn 9): "jedes Element in einer Liste muss
+      // aufgemacht werden können genau wie wenn ich auf einen Mast klicke" -
+      // Klick auf eine Tabellenzeile (außerhalb der Auswahl-Checkbox-Spalte)
+      // öffnet dieselbe Art Maske wie Mast-Detail, hier für generische
+      // Elemente (siehe openElementDetailPage() unten).
+      contentEl.querySelectorAll('tr[data-el-row-key]').forEach((tr) => {
+        tr.addEventListener('click', (e) => {
+          if (e.target.closest('.sel-col')) return;
+          const rowKey = tr.getAttribute('data-el-row-key');
+          const rowBaId = tr.getAttribute('data-el-row-ba');
+          const sec = entry.sections[rowBaId];
+          if (!sec) return;
+          const pair = (sec.rowsByKey || []).find((p) => p[0] === rowKey);
+          if (!pair) return;
+          const baEntry = bas.find((b) => b.id === rowBaId);
+          // Nutzer-Wunsch (Folgeturn 11): bei aktivem "Alle Versionen
+          // anzeigen" trägt jede Zeile ihre eigene Versionsnummer
+          // (data-el-row-version) - ein Klick auf eine ältere Version
+          // öffnet die Element-Detail-Seite direkt bei genau dieser
+          // Version, statt immer nur bei der aktuellsten.
+          const clickedVersion = parseInt(tr.getAttribute('data-el-row-version'), 10) || null;
+          openElementDetailPage(active, pair[1], rowBaId, baEntry ? baEntry.name : '', clickedVersion);
+        });
+      });
+    }
+
+    const renameBtn = document.getElementById('el-rename-sammlung');
+    if (renameBtn) renameBtn.addEventListener('click', () => {
+      const name = window.prompt('Neuer Name für diese Elementensammlung:', active.name);
+      if (!name || !name.trim()) return;
+      const list = loadElementensammlungen().filter((s) => s.type !== 'masttafel');
+      const entry = list.find((s) => s.id === active.id);
+      if (entry) { entry.name = name.trim(); saveElementensammlungen(list); render(); }
+    });
+    const deleteBtn = document.getElementById('el-delete-sammlung');
+    if (deleteBtn) deleteBtn.addEventListener('click', () => {
+      if (!window.confirm(`"${active.name}" inkl. aller importierten Daten wirklich löschen?`)) return;
+      const list = loadElementensammlungen().filter((s) => s.type !== 'masttafel' && s.id !== active.id);
+      saveElementensammlungen(list);
+      deleteElementDatenFor(active.id);
+      elView = 'list';
+      elActiveId = null;
+      render();
+    });
+  }
+
+  function render() {
+    const crumbEl = document.getElementById('el-crumb-projekt');
+    if (crumbEl) crumbEl.textContent = currentProjectLabel();
+
+    const sammlungen = loadElementensammlungen();
+    if (elView !== 'detail' || !elActiveId || !sammlungen.some((s) => s.id === elActiveId)) {
+      elView = 'list';
+      elActiveId = null;
+      hideMasttafelPanel();
+      renderListView(sammlungen);
+      return;
+    }
+    const active = sammlungen.find((s) => s.id === elActiveId);
+    renderDetailView(active);
+  }
+
+  // Nutzer-Wunsch: "die anderen Listen sollen genau so eine Maske haben" -
+  // auch von außen aufrufbar (siehe [data-goto-elemente-masttafel] auf der
+  // Übersicht-Seite), um direkt in die Masttafel-Detailansicht zu springen.
+  window.levelbuildOpenMasttafelInElemente = function () {
+    elActiveId = 'masttafel';
+    elView = 'detail';
+    render();
+  };
+
+  // Teilt sich die globale #modal-overlay mit den anderen Seiten-IIFEs
+  // (gleiches Muster wie z. B. bei der Fertigstellungsliste), verdrahtet
+  // sich aber unabhängig.
+  const modalOverlayEl = document.getElementById('modal-overlay');
+  const modalTitleEl = document.getElementById('modal-title');
+  const modalBodyEl = document.getElementById('modal-body');
+  const modalFooterEl = document.getElementById('modal-footer');
+  function openModalEl(title, bodyHtml, footerHtml) {
+    if (!modalOverlayEl) return;
+    modalTitleEl.textContent = title;
+    modalBodyEl.innerHTML = bodyHtml;
+    modalFooterEl.innerHTML = footerHtml || '';
+    modalOverlayEl.hidden = false;
+  }
+  function closeModalEl() { if (modalOverlayEl) modalOverlayEl.hidden = true; }
+
+  // Nutzer-Wunsch (Folgeturn 3): "es wird gefragt welche Sammlung wollen sie
+  // anlegen dort gibt es eine auswahl von Elementenvorlagen die
+  // Projektübergeordnet schon angelegt wurden" - ersetzt das bisherige
+  // freie Namens-Modal komplett durch eine Mehrfachauswahl der global
+  // angelegten Elementenvorlagen (weiterhin mehrere auf einmal möglich).
+  function openVorlagenPickerModal() {
+    const templates = loadElementTemplates();
+    if (!templates.length) {
+      openModalEl('Neue Elementensammlung anlegen', `
+        <div class="changelog-empty" style="padding:12px 0;">Es sind noch keine Elementenvorlagen angelegt. Lege zuerst unter Projekte → Vorlagen → Elementenvorlagen ein festes Format an (z. B. Schweißliste), bevor du hier eine Sammlung daraus anlegen kannst.</div>
+      `, `
+        <button type="button" class="matt-tool-btn" id="el-vorlagen-close">Schließen</button>
+        <button type="button" class="btn-primary" id="el-vorlagen-goto">Zu den Elementenvorlagen</button>
+      `);
+      document.getElementById('el-vorlagen-close').addEventListener('click', closeModalEl);
+      document.getElementById('el-vorlagen-goto').addEventListener('click', () => {
+        closeModalEl();
+        levelbuildGo('projekte');
+        setTimeout(() => {
+          const tab = document.querySelector('[data-tab="vorlagen"]');
+          if (tab) tab.click();
+        }, 0);
+      });
+      return;
+    }
+    const rowsHtml = templates.map((t) => `
+      <label class="col-config-row" style="cursor:pointer;">
+        <span style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" data-el-vorlage="${esc(t.id)}">
+          <span>
+            <div style="font-weight:600;">${esc(t.name)}</div>
+            <div style="font-size:12px; color:var(--gray-500);">${(t.columns || []).length} Spalten</div>
+          </span>
+        </span>
+      </label>`).join('');
+    openModalEl('Neue Elementensammlung anlegen', `
+      <div style="font-size:12px; color:var(--gray-500); margin-bottom:8px;">
+        Welche Elementensammlung(en) möchtest du anlegen? Jede übernimmt das feste Format ihrer Vorlage - mehrere sind auf einmal möglich.
+      </div>
+      <div class="col-config-list">${rowsHtml}</div>
+    `, `
+      <button type="button" class="matt-tool-btn" id="el-vorlagen-cancel">Abbrechen</button>
+      <button type="button" class="btn-primary" id="el-vorlagen-apply">Anlegen</button>
+    `);
+    document.getElementById('el-vorlagen-cancel').addEventListener('click', closeModalEl);
+    document.getElementById('el-vorlagen-apply').addEventListener('click', () => {
+      const checked = Array.from(modalBodyEl.querySelectorAll('[data-el-vorlage]')).filter((cb) => cb.checked).map((cb) => cb.getAttribute('data-el-vorlage'));
+      if (!checked.length) { closeModalEl(); return; }
+      const list = loadElementensammlungen().filter((s) => s.type !== 'masttafel');
+      let lastId = null;
+      checked.forEach((vorlageId) => {
+        const vorlage = templates.find((t) => t.id === vorlageId);
+        if (!vorlage) return;
+        const neu = createElementensammlungAusVorlage(vorlage);
+        list.push(neu);
+        lastId = neu.id;
+      });
+      saveElementensammlungen(list);
+      if (lastId) { elActiveId = lastId; elView = 'detail'; }
+      closeModalEl();
+      render();
+    });
+  }
+
+  const addBtn = document.getElementById('el-add-sammlung');
+  if (addBtn) addBtn.addEventListener('click', () => openVorlagenPickerModal());
+
+  // Jeder (erneute) Seitenaufruf landet bewusst zuerst auf der Liste (siehe
+  // Kommentar bei elView oben) - eigener Einstiegspunkt statt einfach nur
+  // render(), damit ein zwischenzeitlich in einer Detailansicht verändertes
+  // elView/elActiveId beim nächsten Seitenwechsel zuverlässig zurückgesetzt wird.
+  function goToElementeList() {
+    elView = 'list';
+    elActiveId = null;
+    render();
+  }
+  window.levelbuildOnShowElemente = goToElementeList;
+
+  // Das echte Masttafel-Panel (physisch hierher verschoben, siehe
+  // showMasttafelPanel/hideMasttafelPanel) bringt seinen eigenen
+  // "Zurück"-Link sowie ein Verkleinern-Icon mit, die ursprünglich nur das
+  // Panel selbst versteckt haben (data-collapse-masttafel, weiterhin aktiv
+  // und harmlos). Zusätzlich müssen beide jetzt die Elemente-Seite zurück
+  // auf die Sammlungen-Liste setzen, sonst bliebe #el-content leer.
+  function backToElementeListFromMasttafel() {
+    elView = 'list';
+    elActiveId = null;
+    render();
+  }
+  const backLinkMatt = document.getElementById('matt-panel-back-link');
+  if (backLinkMatt) backLinkMatt.addEventListener('click', backToElementeListFromMasttafel);
+  const collapseIconMatt = document.getElementById('matt-panel-collapse-icon');
+  if (collapseIconMatt) collapseIconMatt.addEventListener('click', backToElementeListFromMasttafel);
+
+  goToElementeList();
+})();
+
+// Kompaktes Masttafel-Widget auf der Übersicht (siehe #overview-default)
+// verlinkt jetzt auf die echte, nach Elemente verschobene Maske statt sie
+// selbst anzuzeigen: erst zur Elemente-Seite wechseln, dann (im nächsten
+// Tick, damit #el-content bereits existiert) die Masttafel-Detailansicht
+// öffnen.
+document.querySelectorAll('[data-goto-elemente-masttafel]').forEach((el) => {
+  el.addEventListener('click', () => {
+    levelbuildGo('elemente');
+    setTimeout(() => {
+      if (window.levelbuildOpenMasttafelInElemente) window.levelbuildOpenMasttafelInElemente();
+    }, 0);
+  });
+});
+
+// ======================================================================
+// Einkauf: Material-Positionen anlegen, einem oder mehreren Standorten
+// (Masten aus der Masttafel) zuordnen, und zu Bestellungen bündeln. Eine
+// Bestellung fasst eine oder mehrere ausgewählte Positionen (inkl. deren
+// Standorte) zu einem einzigen Bestell-PDF im Spitzke-Layout zusammen
+// (siehe downloadBestellungPDF) - die enthaltenen Positionen gelten danach
+// als bestellt und sind dieser Bestellung zugeordnet (pos.bestellungId).
+// Nur aktiv, wenn #ek-tbody existiert (Einkauf-Seite). Persistiert
+// projekt-gescoped über loadEinkaufPositionen()/loadBestellungen() (siehe
+// EINKAUF_KEY/BESTELLUNGEN_KEY weiter oben).
+// ======================================================================
+(function () {
+  const tbodyEl = document.getElementById('ek-tbody');
+  if (!tbodyEl) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+  function fmtDatum(iso) {
+    if (!iso) return '–';
+    const parts = String(iso).split('-');
+    return parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : iso;
+  }
+  function todayIso() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  function linesOf() {
+    return Array.prototype.filter.call(arguments, Boolean).join('\n');
+  }
+
+  const EK_EINHEIT_OPTIONS = ['Stück', 'Palette', 'lfm', 'm', 'm²', 'm³', 't', 'kg', 'Rolle', 'Satz'];
+  function selectOptionsHtml(options, selected) {
+    return options.map((o) => `<option value="${esc(o)}"${o === selected ? ' selected' : ''}>${esc(o)}</option>`).join('');
+  }
+
+  // ---------- kleiner, lokaler Modal-Helfer (teilt sich die eine globale
+  // #modal-overlay mit den anderen Seiten-IIFEs) ----------
+  const modalOverlay = document.getElementById('modal-overlay');
+  const modalTitle = document.getElementById('modal-title');
+  const modalBody = document.getElementById('modal-body');
+  const modalFooter = document.getElementById('modal-footer');
+  function openModal(title, bodyHtml, footerHtml) {
+    if (!modalOverlay) return;
+    modalTitle.textContent = title;
+    modalBody.innerHTML = bodyHtml;
+    modalFooter.innerHTML = footerHtml || '';
+    modalOverlay.hidden = false;
+  }
+  function closeModal() {
+    if (modalOverlay) modalOverlay.hidden = true;
+  }
+
+  function standorteChipsHtml(list) {
+    const arr = list || [];
+    if (!arr.length) return '<div class="changelog-empty">Noch keine Standorte zugeordnet.</div>';
+    return `<div class="lm-standorte-chips">${arr.map((s) => `<span class="lm-standort-chip">${esc(s)}</span>`).join('')}</div>`;
+  }
+
+  // Ankreuz-Auswahl aller im Projekt eingelesenen Masten (über alle
+  // Bauabschnitte hinweg) - Einkauf ist bewusst nicht auf einen einzelnen
+  // Bauabschnitt beschränkt, da eine Material-Position sich auch auf
+  // mehrere Bauabschnitte gleichzeitig beziehen kann.
+  function openStandorteAuswahlModal(snapshot) {
+    const alle = getMastNummernForBauabschnitt(null);
+    const selected = new Set(snapshot.standorte || []);
+    const listHtml = alle.length
+      ? alle.map((m) => `
+        <label class="lm-standort-check-row">
+          <input type="checkbox" value="${esc(m)}" ${selected.has(m) ? 'checked' : ''}>
+          <span>${esc(m)}</span>
+        </label>`).join('')
+      : '<div class="changelog-empty">Es wurden noch keine Standorte aus einer Masttafel eingelesen.</div>';
+    openModal('Standorte zuordnen', `
+      <div style="font-size:12.5px; color:var(--gray-500); margin-bottom:10px;">Bitte die Standorte ankreuzen, die dieser Einkaufsposition zugeordnet werden sollen.</div>
+      <div id="ek-standort-check-list">${listHtml}</div>
+    `, `
+      <button type="button" class="matt-tool-btn" id="ek-standort-cancel">Abbrechen</button>
+      <button type="button" class="btn-primary" id="ek-standort-confirm">Übernehmen</button>
+    `);
+    document.getElementById('ek-standort-cancel').addEventListener('click', () => openPositionModal(snapshot.id, snapshot));
+    document.getElementById('ek-standort-confirm').addEventListener('click', () => {
+      const checked = Array.from(document.querySelectorAll('#ek-standort-check-list input[type="checkbox"]:checked')).map((c) => c.value);
+      snapshot.standorte = checked;
+      openPositionModal(snapshot.id, snapshot);
+    });
+  }
+
+  function positionModalHtml(item) {
+    return `
+      <div class="field">
+        <label>Material</label>
+        <div class="input-wrap"><input type="text" id="ek-material" value="${esc(item.material || '')}" placeholder="z. B. Stahlrohre 323,9x14,2mm"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Menge</label><div class="input-wrap"><input type="number" step="0.01" id="ek-menge" value="${esc(item.menge != null ? item.menge : '')}"></div></div>
+        <div class="field">
+          <label>Einheit</label>
+          <div class="input-wrap">
+            <select id="ek-einheit">${selectOptionsHtml(EK_EINHEIT_OPTIONS, item.einheit || 'Stück')}</select>
+            <span class="chev-select"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>
+          </div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Standorte</label>
+        <div id="ek-standorte-list">${standorteChipsHtml(item.standorte)}</div>
+        <input type="hidden" id="ek-standorte" value='${esc(JSON.stringify(item.standorte || []))}'>
+        <button type="button" class="matt-tool-btn" id="ek-standorte-btn">Standorte zuordnen</button>
+      </div>
+      <div class="field">
+        <label>Notiz</label>
+        <div class="input-wrap"><textarea id="ek-notiz" rows="2" class="pe-textarea">${esc(item.notiz || '')}</textarea></div>
+      </div>
+    `;
+  }
+
+  function openPositionModal(id, overrideItem) {
+    let item = { material: '', menge: null, einheit: 'Stück', standorte: [], notiz: '', bestellungId: null };
+    let title = 'Position hinzufügen';
+    if (overrideItem) {
+      item = overrideItem;
+      title = id ? 'Position bearbeiten' : 'Position hinzufügen';
+    } else if (id) {
+      const found = loadEinkaufPositionen().find((x) => x.id === id);
+      if (found) item = found;
+      title = 'Position bearbeiten';
+    }
+    item.id = id || item.id;
+    openModal(title, positionModalHtml(item), `
+      <button type="button" class="matt-tool-btn" id="ek-cancel">Abbrechen</button>
+      <button type="button" class="btn-primary" id="ek-save">Speichern</button>
+    `);
+    document.getElementById('ek-cancel').addEventListener('click', closeModal);
+    document.getElementById('ek-standorte-btn').addEventListener('click', () => {
+      const snapshot = readPositionModal();
+      snapshot.id = id;
+      openStandorteAuswahlModal(snapshot);
+    });
+    document.getElementById('ek-save').addEventListener('click', () => {
+      const data = readPositionModal();
+      if (!data.material) { alert('Bitte einen Material-Namen eingeben.'); return; }
+      const list = loadEinkaufPositionen();
+      if (id) {
+        const existing = list.find((x) => x.id === id);
+        if (existing) Object.assign(existing, data);
+      } else {
+        list.push(Object.assign({ id: makeEinkaufId(), bestellungId: null, eingekauft: false, eingekauftAm: null, createdAt: new Date().toISOString() }, data));
+      }
+      saveEinkaufPositionen(list);
+      closeModal();
+      render();
+    });
+  }
+
+  function readPositionModal() {
+    const material = document.getElementById('ek-material').value.trim();
+    const mengeRaw = document.getElementById('ek-menge').value;
+    const einheit = document.getElementById('ek-einheit').value;
+    let standorte = [];
+    try { standorte = JSON.parse(document.getElementById('ek-standorte').value || '[]'); } catch (e) { standorte = []; }
+    const notiz = document.getElementById('ek-notiz').value.trim();
+    return { material, menge: mengeRaw === '' ? null : parseFloat(mengeRaw), einheit, standorte, notiz };
+  }
+
+  // ---------- Auswahl (Checkboxen) für "Bestellung erstellen" ----------
+  let selectedIds = new Set();
+
+  function updateBestellungBtn() {
+    const btn = document.getElementById('ek-bestellung-btn');
+    if (!btn) return;
+    btn.textContent = `Bestellung erstellen (${selectedIds.size})`;
+    btn.disabled = selectedIds.size === 0;
+  }
+
+  // ---------- Tabelle / Filter (Positionen) ----------
+  let filters = { material: '', standort: '', status: '' };
+
+  function matchesFilters(pos) {
+    if (filters.material && !String(pos.material || '').toLowerCase().includes(filters.material.toLowerCase())) return false;
+    if (filters.standort && !(pos.standorte || []).some((s) => String(s).toLowerCase().includes(filters.standort.toLowerCase()))) return false;
+    if (filters.status === 'offen' && pos.bestellungId) return false;
+    if (filters.status === 'bestellt' && !pos.bestellungId) return false;
+    return true;
+  }
+
+  function statusChipHtml(pos) {
+    return pos.bestellungId
+      ? '<span class="tl-status-chip" style="--tl-color:#2f9e58;">Bestellt</span>'
+      : '<span class="tl-status-chip" style="--tl-color:#8a94a6;">Offen</span>';
+  }
+
+  function render() {
+    const crumbEl = document.getElementById('ek-crumb-projekt');
+    if (crumbEl) crumbEl.textContent = currentProjectLabel();
+
+    const bestellungenMap = new Map(loadBestellungen().map((b) => [b.id, b]));
+    const all = loadEinkaufPositionen().slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+
+    // Ausgewählte IDs, die nicht mehr existieren oder inzwischen bestellt
+    // sind (z. B. durch eine parallele Aktion), aus der Auswahl entfernen.
+    const stillSelectable = new Set(all.filter((p) => !p.bestellungId).map((p) => p.id));
+    Array.from(selectedIds).forEach((id) => { if (!stillSelectable.has(id)) selectedIds.delete(id); });
+    updateBestellungBtn();
+
+    const items = all.filter(matchesFilters);
+    const countEl = document.getElementById('ek-count');
+    if (countEl) countEl.textContent = String(items.length);
+    const emptyEl = document.getElementById('ek-empty');
+    const wrapEl = document.getElementById('ek-wrap');
+    if (!all.length) {
+      if (emptyEl) emptyEl.hidden = false;
+      if (wrapEl) wrapEl.hidden = true;
+      tbodyEl.innerHTML = '';
+      renderBestellungen();
+      return;
+    }
+    if (emptyEl) emptyEl.hidden = true;
+    if (wrapEl) wrapEl.hidden = false;
+    if (!items.length) {
+      tbodyEl.innerHTML = '<tr><td colspan="9" class="changelog-empty" style="padding:14px 0;">Keine Positionen entsprechen den aktuellen Filtern.</td></tr>';
+      renderBestellungen();
+      return;
+    }
+    tbodyEl.innerHTML = items.map((pos) => {
+      const bestellung = pos.bestellungId ? bestellungenMap.get(pos.bestellungId) : null;
+      return `
+      <tr data-ek-id="${esc(pos.id)}">
+        <td>${pos.bestellungId ? '' : `<input type="checkbox" data-ek-select="${esc(pos.id)}" ${selectedIds.has(pos.id) ? 'checked' : ''}>`}</td>
+        <td>${esc(pos.material || '–')}</td>
+        <td>${pos.menge != null ? esc(String(pos.menge).replace('.', ',')) : '–'}</td>
+        <td>${esc(pos.einheit || '–')}</td>
+        <td>${standorteChipsHtml(pos.standorte)}</td>
+        <td>${esc(pos.notiz || '–')}</td>
+        <td>${statusChipHtml(pos)}</td>
+        <td>${bestellung ? esc(bestellung.bestellnummer || '–') : '–'}</td>
+        <td style="white-space:nowrap;">
+          <button type="button" class="link-action" data-ek-edit="${esc(pos.id)}">Bearbeiten</button>
+          <button type="button" class="link-action" data-ek-delete="${esc(pos.id)}" style="color:var(--red);">Löschen</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    tbodyEl.querySelectorAll('[data-ek-select]').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        const id = cb.getAttribute('data-ek-select');
+        if (cb.checked) selectedIds.add(id); else selectedIds.delete(id);
+        updateBestellungBtn();
+      });
+    });
+    tbodyEl.querySelectorAll('[data-ek-edit]').forEach((btn) => {
+      btn.addEventListener('click', () => openPositionModal(btn.getAttribute('data-ek-edit')));
+    });
+    tbodyEl.querySelectorAll('[data-ek-delete]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!window.confirm('Diese Einkaufsposition wirklich löschen?')) return;
+        const id = btn.getAttribute('data-ek-delete');
+        saveEinkaufPositionen(loadEinkaufPositionen().filter((x) => x.id !== id));
+        selectedIds.delete(id);
+        render();
+      });
+    });
+
+    renderBestellungen();
+  }
+
+  document.querySelectorAll('[data-ek-filter]').forEach((input) => {
+    input.addEventListener('input', () => {
+      filters[input.getAttribute('data-ek-filter')] = input.value;
+      render();
+    });
+    input.addEventListener('change', () => {
+      filters[input.getAttribute('data-ek-filter')] = input.value;
+      render();
+    });
+  });
+  const clearBtn = document.getElementById('ek-clear-filters');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      filters = { material: '', standort: '', status: '' };
+      document.querySelectorAll('[data-ek-filter]').forEach((input) => { input.value = ''; });
+      render();
+    });
+  }
+  const addBtn = document.getElementById('ek-add-btn');
+  if (addBtn) addBtn.addEventListener('click', () => openPositionModal(null));
+  const bestellungBtn = document.getElementById('ek-bestellung-btn');
+  if (bestellungBtn) {
+    bestellungBtn.addEventListener('click', () => {
+      if (!selectedIds.size) return;
+      openBestellungModal(Array.from(selectedIds));
+    });
+  }
+
+  // ---------- Bestellungen-Liste ----------
+  function renderBestellungen() {
+    const list = loadBestellungen().slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    const tbody = document.getElementById('ekb-tbody');
+    const countEl = document.getElementById('ekb-count');
+    const emptyEl = document.getElementById('ekb-empty');
+    const wrapEl = document.getElementById('ekb-wrap');
+    if (countEl) countEl.textContent = String(list.length);
+    if (!list.length) {
+      if (emptyEl) emptyEl.hidden = false;
+      if (wrapEl) wrapEl.hidden = true;
+      if (tbody) tbody.innerHTML = '';
+      return;
+    }
+    if (emptyEl) emptyEl.hidden = true;
+    if (wrapEl) wrapEl.hidden = false;
+    if (!tbody) return;
+    tbody.innerHTML = list.map((b) => `
+      <tr data-ekb-id="${esc(b.id)}">
+        <td>${esc(b.bestellnummer || '–')}</td>
+        <td>${esc(fmtDatum(b.datumVom))}</td>
+        <td>${esc(b.lieferantName || '–')}</td>
+        <td>${(b.positionen || []).length}</td>
+        <td style="white-space:nowrap;">
+          <button type="button" class="link-action" data-ekb-pdf="${esc(b.id)}">PDF herunterladen</button>
+          <button type="button" class="link-action" data-ekb-delete="${esc(b.id)}" style="color:var(--red);">Löschen</button>
+        </td>
+      </tr>`).join('');
+    tbody.querySelectorAll('[data-ekb-pdf]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const b = loadBestellungen().find((x) => x.id === btn.getAttribute('data-ekb-pdf'));
+        if (b) downloadBestellungPDF(b);
+      });
+    });
+    tbody.querySelectorAll('[data-ekb-delete]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!window.confirm('Diese Bestellung wirklich löschen? Die zugehörigen Positionen werden wieder als offen markiert.')) return;
+        const id = btn.getAttribute('data-ekb-delete');
+        const b = loadBestellungen().find((x) => x.id === id);
+        saveBestellungen(loadBestellungen().filter((x) => x.id !== id));
+        if (b) {
+          const posList = loadEinkaufPositionen();
+          (b.positionen || []).forEach((bp) => {
+            const p = posList.find((x) => x.id === bp.id);
+            if (p && p.bestellungId === id) { p.bestellungId = null; p.eingekauft = false; p.eingekauftAm = null; }
+          });
+          saveEinkaufPositionen(posList);
+        }
+        render();
+      });
+    });
+  }
+
+  // ---------- Bestellung-Modal (Kopfdaten erfassen) ----------
+  function bestellungModalHtml(positionen) {
+    const einstellungen = loadEinkaufEinstellungen();
+    const lieferanten = loadLieferanten();
+    return `
+      <div class="field-row">
+        <div class="field"><label>Bestellnummer</label><div class="input-wrap"><input type="text" id="best-nummer" placeholder="z. B. BES-2627-10100080"></div></div>
+        <div class="field"><label>Datum vom</label><div class="input-wrap"><input type="date" id="best-datum" value="${esc(todayIso())}"></div></div>
+      </div>
+      <div class="hr" style="margin:14px 0;"></div>
+      <div class="field-row">
+        <div class="field"><label>Kostenstelle</label><div class="input-wrap"><input type="text" id="best-kostenstelle" value="${esc(einstellungen.kostenstelle)}"></div></div>
+        <div class="field"><label>Bauvorhaben</label><div class="input-wrap"><input type="text" id="best-bauvorhaben" value="${esc(einstellungen.bauvorhaben)}"></div></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Einkäufer Name</label><div class="input-wrap"><input type="text" id="best-einkaeufer-name" value="${esc(einstellungen.einkaeuferName)}"></div></div>
+        <div class="field"><label>Einkäufer Telefon</label><div class="input-wrap"><input type="text" id="best-einkaeufer-telefon" value="${esc(einstellungen.einkaeuferTelefon)}"></div></div>
+      </div>
+      <div class="field"><label>Einkäufer E-Mail</label><div class="input-wrap"><input type="email" id="best-einkaeufer-email" value="${esc(einstellungen.einkaeuferEmail)}"></div></div>
+      <div class="hr" style="margin:14px 0;"></div>
+      <div class="field-row">
+        <div class="field"><label>Ansprechpartner (intern) Name</label><div class="input-wrap"><input type="text" id="best-ansprechpartner-name"></div></div>
+        <div class="field"><label>Ansprechpartner Telefon</label><div class="input-wrap"><input type="text" id="best-ansprechpartner-telefon"></div></div>
+      </div>
+      <div class="hr" style="margin:14px 0;"></div>
+      <div class="field">
+        <label>Lieferant</label>
+        <div class="input-wrap">
+          <select id="best-lieferant-select">
+            <option value="">– manuell eingeben –</option>
+            ${lieferanten.map((l) => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')}
+          </select>
+          <span class="chev-select"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Lieferant Name</label>
+        <div class="input-wrap"><input type="text" id="best-lieferant-name"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Lieferant Straße</label><div class="input-wrap"><input type="text" id="best-lieferant-strasse"></div></div>
+        <div class="field"><label>Lieferant PLZ / Ort</label><div class="input-wrap"><input type="text" id="best-lieferant-plzort"></div></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Kontakt Name</label><div class="input-wrap"><input type="text" id="best-kontakt-name"></div></div>
+        <div class="field"><label>Kontakt Telefon</label><div class="input-wrap"><input type="text" id="best-kontakt-telefon"></div></div>
+      </div>
+      <div class="field"><label>Kontakt E-Mail</label><div class="input-wrap"><input type="email" id="best-kontakt-email"></div></div>
+      <div class="hr" style="margin:14px 0;"></div>
+      <div class="subheading" style="margin-bottom:0;">Lieferanschrift</div>
+      <div class="field-row">
+        <div class="field"><label>Firma</label><div class="input-wrap"><input type="text" id="best-lieferanschrift-firma" value="${esc(einstellungen.lieferanschriftFirma)}"></div></div>
+        <div class="field"><label>Zusatz</label><div class="input-wrap"><input type="text" id="best-lieferanschrift-zusatz" value="${esc(einstellungen.lieferanschriftZusatz)}"></div></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Straße</label><div class="input-wrap"><input type="text" id="best-lieferanschrift-strasse" value="${esc(einstellungen.lieferanschriftStrasse)}"></div></div>
+        <div class="field"><label>PLZ / Ort</label><div class="input-wrap"><input type="text" id="best-lieferanschrift-plzort" value="${esc(einstellungen.lieferanschriftPlzOrt)}"></div></div>
+      </div>
+      <div class="hr" style="margin:14px 0;"></div>
+      <div class="field-row">
+        <div class="field"><label>Ihre Referenz</label><div class="input-wrap"><input type="text" id="best-referenz"></div></div>
+        <div class="field"><label>Ihre Angebotsnr.</label><div class="input-wrap"><input type="text" id="best-angebotsnr"></div></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Ihr Angebot vom</label><div class="input-wrap"><input type="date" id="best-angebot-vom"></div></div>
+        <div class="field"><label>Lieferdatum</label><div class="input-wrap"><input type="date" id="best-lieferdatum"></div></div>
+      </div>
+      <div class="field"><label>Lieferbedingung</label><div class="input-wrap"><input type="text" id="best-lieferbedingung" placeholder="z. B. ab Werk"></div></div>
+      <div class="hr" style="margin:14px 0;"></div>
+      <div class="field">
+        <label>Positionen (${positionen.length})</label>
+        <div style="font-size:12.5px; color:var(--gray-500); line-height:1.6;">
+          ${positionen.map((p) => `${esc(p.material)} — ${p.menge != null ? esc(String(p.menge).replace('.', ',')) : '–'} ${esc(p.einheit || '')} (${esc((p.standorte || []).join(', ') || 'keine Standorte')})`).join('<br>')}
+        </div>
+      </div>
+    `;
+  }
+
+  function openBestellungModal(positionIds) {
+    const allPositions = loadEinkaufPositionen();
+    const positionen = positionIds.map((id) => allPositions.find((p) => p.id === id)).filter(Boolean);
+    if (!positionen.length) return;
+    openModal(`Bestellung erstellen (${positionen.length} Position${positionen.length === 1 ? '' : 'en'})`, bestellungModalHtml(positionen), `
+      <button type="button" class="matt-tool-btn" id="best-cancel">Abbrechen</button>
+      <button type="button" class="btn-primary" id="best-save">Bestellung erstellen</button>
+    `);
+    document.getElementById('best-cancel').addEventListener('click', closeModal);
+    document.getElementById('best-lieferant-select').addEventListener('change', (e) => {
+      const lf = loadLieferanten().find((l) => l.id === e.target.value);
+      if (!lf) return;
+      document.getElementById('best-lieferant-name').value = lf.name || '';
+      document.getElementById('best-lieferant-strasse').value = lf.strasse || '';
+      document.getElementById('best-lieferant-plzort').value = lf.plzOrt || '';
+      document.getElementById('best-kontakt-name').value = lf.kontaktName || '';
+      document.getElementById('best-kontakt-telefon').value = lf.kontaktTelefon || '';
+      document.getElementById('best-kontakt-email').value = lf.kontaktEmail || '';
+    });
+    document.getElementById('best-save').addEventListener('click', () => {
+      const bestellnummer = document.getElementById('best-nummer').value.trim();
+      if (!bestellnummer) { alert('Bitte eine Bestellnummer eingeben.'); return; }
+      const datumVom = document.getElementById('best-datum').value || todayIso();
+      const bestellung = {
+        id: makeBestellungId(),
+        bestellnummer,
+        datumVom,
+        kostenstelle: document.getElementById('best-kostenstelle').value.trim(),
+        bauvorhaben: document.getElementById('best-bauvorhaben').value.trim(),
+        einkaeuferName: document.getElementById('best-einkaeufer-name').value.trim(),
+        einkaeuferTelefon: document.getElementById('best-einkaeufer-telefon').value.trim(),
+        einkaeuferEmail: document.getElementById('best-einkaeufer-email').value.trim(),
+        ansprechpartnerName: document.getElementById('best-ansprechpartner-name').value.trim(),
+        ansprechpartnerTelefon: document.getElementById('best-ansprechpartner-telefon').value.trim(),
+        lieferantId: document.getElementById('best-lieferant-select').value || null,
+        lieferantName: document.getElementById('best-lieferant-name').value.trim(),
+        lieferantStrasse: document.getElementById('best-lieferant-strasse').value.trim(),
+        lieferantPlzOrt: document.getElementById('best-lieferant-plzort').value.trim(),
+        kontaktName: document.getElementById('best-kontakt-name').value.trim(),
+        kontaktTelefon: document.getElementById('best-kontakt-telefon').value.trim(),
+        kontaktEmail: document.getElementById('best-kontakt-email').value.trim(),
+        lieferanschriftFirma: document.getElementById('best-lieferanschrift-firma').value.trim(),
+        lieferanschriftZusatz: document.getElementById('best-lieferanschrift-zusatz').value.trim(),
+        lieferanschriftStrasse: document.getElementById('best-lieferanschrift-strasse').value.trim(),
+        lieferanschriftPlzOrt: document.getElementById('best-lieferanschrift-plzort').value.trim(),
+        ihreReferenz: document.getElementById('best-referenz').value.trim(),
+        ihreAngebotsnr: document.getElementById('best-angebotsnr').value.trim(),
+        ihrAngebotVom: document.getElementById('best-angebot-vom').value,
+        lieferdatum: document.getElementById('best-lieferdatum').value,
+        lieferbedingung: document.getElementById('best-lieferbedingung').value.trim(),
+        druckdatum: todayIso(),
+        positionen: positionen.map((p) => ({ id: p.id, material: p.material, menge: p.menge, einheit: p.einheit, standorte: (p.standorte || []).slice() })),
+        createdAt: new Date().toISOString(),
+      };
+      const bestellungen = loadBestellungen();
+      bestellungen.push(bestellung);
+      saveBestellungen(bestellungen);
+
+      const posList = loadEinkaufPositionen();
+      positionIds.forEach((id) => {
+        const p = posList.find((x) => x.id === id);
+        if (p) { p.bestellungId = bestellung.id; p.eingekauft = true; p.eingekauftAm = datumVom; }
+      });
+      saveEinkaufPositionen(posList);
+
+      selectedIds.clear();
+      closeModal();
+      render();
+      downloadBestellungPDF(bestellung);
+    });
+  }
+
+  // ---------- Bestellung-PDF (Spitzke-Layout) ----------
+  function downloadBestellungPDF(bestellung) {
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+      alert('Die PDF-Erstellung konnte nicht geladen werden. Bitte Internetverbindung prüfen.');
+      return;
+    }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const marginX = 50;
+    const grayLine = [200, 204, 210];
+
+    // Briefkopf-Logo oben rechts (fest hinterlegtes Firmenlogo)
+    const logoWidth = 128;
+    const logoHeight = Math.round(logoWidth * (310 / 264));
+    try {
+      doc.addImage('data:image/png;base64,' + EINKAUF_LOGO_BASE64, 'PNG', pageWidth - marginX - logoWidth, 32, logoWidth, logoHeight);
+    } catch (e) { /* z. B. in Testumgebungen ohne echtes Bild-Decoding - unkritisch */ }
+
+    // Lieferant-Adresse oben links (Empfängerfeld)
+    let y = 64;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.setTextColor(0, 0, 0);
+    [bestellung.lieferantName, bestellung.lieferantStrasse, bestellung.lieferantPlzOrt].filter(Boolean).forEach((line) => {
+      doc.text(line, marginX, y);
+      y += 13;
+    });
+
+    // Überschrift
+    const headY = 190;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.text(`Bestellung Nr. ${bestellung.bestellnummer || ''} vom ${fmtDatum(bestellung.datumVom)}`, marginX, headY);
+
+    // Gerahmte Kopfdaten-Tabelle (2x2-Feldgruppen, per rowSpan analog zur
+    // Referenzvorlage: Einkäufer spannt Kostenstelle+Bauvorhaben,
+    // Lieferanschrift spannt Referenz/Angebotsnr./Angebot vom).
+    const bold = (content, extra) => Object.assign({ content, styles: { fontStyle: 'bold' } }, extra || {});
+    const rows = [
+      [bold('Kostenstelle'), bestellung.kostenstelle || '', bold('Einkäufer', { rowSpan: 2 }), { content: linesOf(bestellung.einkaeuferName, bestellung.einkaeuferTelefon, bestellung.einkaeuferEmail), rowSpan: 2 }],
+      [bold('Bauvorhaben'), bestellung.bauvorhaben || ''],
+      [bold('Ansprechpartner'), linesOf(bestellung.ansprechpartnerName, bestellung.ansprechpartnerTelefon), bold('Kontakt'), linesOf(bestellung.kontaktName, bestellung.kontaktTelefon, bestellung.kontaktEmail)],
+      [bold('Lieferanschrift', { rowSpan: 3 }), { content: linesOf(bestellung.lieferanschriftFirma, bestellung.lieferanschriftZusatz, bestellung.lieferanschriftStrasse, bestellung.lieferanschriftPlzOrt), rowSpan: 3 }, bold('Ihre Referenz'), bestellung.ihreReferenz || ''],
+      [bold('Ihre Angebotsnr.'), bestellung.ihreAngebotsnr || ''],
+      [bold('Ihr Angebot vom'), bestellung.ihrAngebotVom ? fmtDatum(bestellung.ihrAngebotVom) : ''],
+      [bold('Lieferdatum'), fmtDatum(bestellung.lieferdatum), bold('Druckdatum'), fmtDatum(bestellung.druckdatum)],
+      [bold('Lieferbedingung'), bestellung.lieferbedingung || ''],
+    ];
+    doc.autoTable({
+      startY: headY + 16,
+      margin: { left: marginX, right: marginX },
+      body: rows,
+      theme: 'grid',
+      styles: { fontSize: 9, cellPadding: 6, textColor: [20, 22, 26], lineColor: grayLine, lineWidth: 0.6, valign: 'top', overflow: 'linebreak' },
+      columnStyles: { 0: { cellWidth: 92 }, 1: { cellWidth: 154 }, 2: { cellWidth: 92 }, 3: { cellWidth: 154 } },
+    });
+
+    // Linienlose Positionstabelle - je Position eine Zeile mit Bezeichnung/
+    // Menge/Einheit, direkt darunter die zugehörigen Standorte.
+    let posY = doc.lastAutoTable.finalY + 26;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Bestellte Positionen', marginX, posY);
+
+    const posBody = [];
+    (bestellung.positionen || []).forEach((p) => {
+      posBody.push([p.material || '–', p.menge != null ? String(p.menge).replace('.', ',') : '–', p.einheit || '–']);
+      posBody.push([{ content: 'Standorte: ' + ((p.standorte || []).join(', ') || '–'), colSpan: 3, styles: { fontStyle: 'italic', textColor: [110, 118, 132], fontSize: 8.5 } }]);
+    });
+    doc.autoTable({
+      startY: posY + 10,
+      margin: { left: marginX, right: marginX },
+      head: [['Bezeichnung', 'Menge', 'Einheit']],
+      body: posBody,
+      theme: 'plain',
+      styles: { fontSize: 9.5, cellPadding: { top: 4, bottom: 4, left: 0, right: 8 }, textColor: [20, 22, 26], overflow: 'linebreak' },
+      headStyles: { fontStyle: 'bold', fontSize: 9.5 },
+      columnStyles: { 1: { cellWidth: 70 }, 2: { cellWidth: 70 } },
+    });
+
+    doc.save(`Bestellung_${(bestellung.bestellnummer || 'ohne-Nummer').replace(/[\\/:*?"<>|]+/g, '_')}.pdf`);
+  }
+
+  window.levelbuildOnShowEinkauf = render;
   render();
 })();

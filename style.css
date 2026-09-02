@@ -443,6 +443,30 @@ a{ text-decoration: none; color: inherit; }
   width: 100%;
   max-width: 1180px;
 }
+/* Nutzer-Wunsch: "die ganzen untereinstellungen ... sollen sich ... immer
+   der breite des fensters anpassen schau mal wie viel leerraum da ist" -
+   die Projekteinstellungen-Seite hatte bisher eine feste 380px-Spalte
+   (.panel-col), die auf breiten Bildschirmen einen riesigen leeren Bereich
+   rechts übrig lässt. .panel-col-grid (zusätzlich zu .panel-col auf
+   demselben Element, überschreibt hier gezielt display/Breite) macht daraus
+   stattdessen ein responsives Grid: so viele Spalten wie in die verfügbare
+   Fensterbreite passen (je min. 380px, max. gleichmäßig verteilt via 1fr) -
+   beim Verkleinern/Vergrößern des Fensters ordnen sich die Panels
+   automatisch neu an. Einzelne Panels/Formularfelder werden dabei NICHT
+   absurd breit (das wäre bei einer einzelnen, extrem breiten Spalte der
+   Fall) - stattdessen wird der Leerraum durch mehr nebeneinander liegende
+   Spalten gefüllt. align-items:start statt des Grid-Standards "stretch",
+   damit unterschiedlich hohe Panels (z. B. "Tätigkeitslisten" mit Regeln-
+   Tabelle vs. das kurze "Protokolle"-Panel) nicht künstlich auf dieselbe
+   Zeilenhöhe gedehnt werden. */
+.panel-col-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  align-items: start;
+  width: 100%;
+  max-width: none;
+}
+.panel-col-grid > .panel{ height: auto; }
 /* .panel-col sets display:flex, which (being an author-stylesheet rule)
    silently overrides the browser's default [hidden]{display:none} styling
    at equal specificity - without this, an element that is both
@@ -1126,7 +1150,9 @@ a{ text-decoration: none; color: inherit; }
 /* Row-selection checkbox column - always the very first column, ahead of
    the key column, so it stays visible during horizontal scroll too. */
 .masttafel-table td.sel-col,
-.masttafel-table th.sel-col{
+.masttafel-table th.sel-col,
+.dok-table td.sel-col,
+.dok-table th.sel-col{
   position: sticky;
   left: 0;
   background: #fff;
@@ -1134,7 +1160,8 @@ a{ text-decoration: none; color: inherit; }
   text-align: center;
   padding: 0.4em;
 }
-.masttafel-table thead th.sel-col{
+.masttafel-table thead th.sel-col,
+.dok-table thead th.sel-col{
   background: var(--gray-50);
   z-index: 9;
 }
@@ -1293,8 +1320,11 @@ a{ text-decoration: none; color: inherit; }
 .bw-index-line .idx-badge{ margin-left: 6px; font-size: 11px; padding: 2px 7px; }
 
 /* Marks the exact cells whose value changed vs. the neighbouring version -
-   only ever applied while "Alle Versionen anzeigen" is switched on. */
-.masttafel-table td.cell-changed{
+   only ever applied while "Alle Versionen anzeigen" is switched on. Also
+   used by the generic Elementensammlungen table (.dok-table), which has
+   the same "Alle Versionen anzeigen" toggle - see genericSammlungHtml(). */
+.masttafel-table td.cell-changed,
+.dok-table td.cell-changed{
   background: #fdecea;
   color: var(--red);
   font-weight: 700;
@@ -2419,6 +2449,7 @@ a{ text-decoration: none; color: inherit; }
 .lm-standort-chip{
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   background: var(--blue-light);
   color: var(--blue);
   font-size: 12px;
@@ -2426,6 +2457,22 @@ a{ text-decoration: none; color: inherit; }
   padding: 4px 10px;
   border-radius: 20px;
 }
+/* Entfernen-"×" direkt im Chip, statt eines separaten Buttons daneben -
+   genutzt z. B. bei "Welche Protokolle?" in der Tätigkeit-Bearbeiten-Maske,
+   wo Chips per Dropdown hinzugefügt und per Klick auf das × wieder entfernt
+   werden (gleiche Optik wie die Standorte-Chips im Bautagebuch). */
+.lm-standort-chip .chip-remove{
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0;
+  margin: -1px 0 0;
+  cursor: pointer;
+  opacity: .65;
+}
+.lm-standort-chip .chip-remove:hover{ opacity: 1; }
 .lm-standorte-btn{ width: fit-content; }
 .lm-standort-check-row{
   display: flex;
@@ -2518,7 +2565,143 @@ a{ text-decoration: none; color: inherit; }
   color: #1a9c4b;
   background: rgba(63,185,80,0.10);
   font-weight: 600;
+  cursor: pointer;
 }
+.fzl-cell-done:hover{
+  background: rgba(63,185,80,0.22);
+  text-decoration: underline;
+}
+
+/* ---------- Fertigstellungsliste: Ereignis-Detail-Modal ---------- */
+.fzl-evt-modal{ display: flex; flex-direction: column; gap: 16px; }
+.fzl-evt-section{ border-top: 1px solid var(--gray-100); padding-top: 12px; }
+.fzl-evt-section:first-child{ border-top: none; padding-top: 0; }
+.fzl-evt-section-title{
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--gray-500);
+  margin-bottom: 8px;
+}
+.fzl-evt-row{ display: flex; gap: 10px; padding: 4px 0; font-size: 13px; }
+.fzl-evt-label{ width: 150px; flex-shrink: 0; color: var(--gray-500); }
+.fzl-evt-value{ color: var(--text); font-weight: 500; word-break: break-word; }
+.fzl-evt-ereignis{
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+}
+.fzl-evt-ereignis:last-child{ margin-bottom: 0; }
+.fzl-evt-ereignis-head{ font-weight: 600; color: var(--gray-600); margin-bottom: 2px; }
+.fzl-evt-ereignis-desc{ color: var(--gray-500); margin-top: 2px; }
+.fzl-evt-protokoll-name{ font-weight: 600; font-size: 12.5px; margin-bottom: 4px; }
+.fzl-evt-doc-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--gray-100);
+  font-size: 12.5px;
+}
+.fzl-evt-doc-row:first-child{ border-top: none; }
+.fzl-evt-fotos{ display: flex; flex-wrap: wrap; gap: 8px; }
+.fzl-evt-fotos img{
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--gray-200);
+}
+
+/* ---------- Fotos-Seite: aggregierte Kachel-Galerie ---------- */
+.fo-toolbar{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--gray-100);
+}
+.fo-toolbar-group{ display: flex; flex-direction: column; gap: 4px; }
+.fo-toolbar-group label{
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--gray-500);
+}
+.fo-toolbar-group select,
+.fo-toolbar-group input[type="text"]{
+  height: 32px;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  padding: 0 9px;
+  font-size: 12.5px;
+  color: var(--gray-800);
+  background: #fff;
+  min-width: 150px;
+}
+.fo-toolbar-search{ flex: 1; min-width: 220px; }
+.fo-toolbar-search input{ width: 100%; min-width: 0; }
+.fo-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+}
+.fo-card{
+  cursor: pointer;
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+}
+.fo-card:hover{ box-shadow: 0 2px 10px rgba(0,0,0,0.08); border-color: var(--gray-300); }
+.fo-thumb{ width: 100%; aspect-ratio: 1 / 1; background: var(--gray-100); overflow: hidden; }
+.fo-thumb img{ width: 100%; height: 100%; object-fit: cover; display: block; }
+.fo-meta{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 7px 8px 2px;
+  font-size: 10.5px;
+  color: var(--gray-500);
+}
+.fo-meta-tag{
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.fo-meta-tag-standort{ background: rgba(47,111,237,0.12); color: #2f6fed; }
+.fo-meta-tag-protokoll{ background: rgba(138,99,210,0.14); color: #8a63d2; }
+.fo-meta-standort{
+  padding: 0 8px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fo-lightbox{ display: flex; flex-direction: column; gap: 14px; }
+.fo-lightbox img{
+  width: 100%;
+  max-height: 55vh;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--gray-100);
+}
+.fo-lightbox-info{ display: flex; flex-direction: column; }
 .fzl-active-view-label{
   font-size: 11.5px;
   font-weight: 500;
@@ -2574,6 +2757,54 @@ a{ text-decoration: none; color: inherit; }
    neben dem Spaltentext. */
 .fzl-th-label{ display: inline; }
 .fzl-table thead tr.fzl-head-row th.th-sorted .fzl-th-label{ color: var(--blue); font-weight: 700; }
+
+/* Übergeordnete Art-Kopfzeile (über der normalen Spaltenkopfzeile): eine
+   schmale Zeile, die zusammenhängende Aufgaben-Spalten derselben
+   Tätigkeitsart farblich gruppiert (Hintergrund + Unterstrich je Spalte,
+   Beschriftung nur auf der ersten Spalte einer Gruppe - siehe artRowHtml). */
+.fzl-art-row th{
+  padding: 3px 10px;
+  height: 20px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  border-bottom: none;
+}
+.fzl-art-row th.fzl-mast-col-head{ background: var(--gray-100); }
+.fzl-art-row-label{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+
+/* Übergeordnete Tätigkeits-Kopfzeile für aufgeteilte Protokoll-Spalten
+   (Nutzer-Wunsch: "Rammen/Bohren" spannt optisch über "Rammen"|"Bohren") -
+   gleiches Prinzip/gleiche Zeilenhöhe wie die Art-Kopfzeile oben, nur mit
+   neutraler Farbe statt Art-Farbe (hier gibt es keine individuelle Farbe je
+   Gruppe) und can gleichzeitig MIT der Art-Kopfzeile erscheinen. */
+.fzl-taskgroup-row th{
+  padding: 3px 10px;
+  height: 20px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  border-bottom: none;
+  color: var(--gray-500);
+}
+.fzl-taskgroup-row th.fzl-mast-col-head{ background: var(--gray-100); }
+.fzl-taskgroup-row th.fzl-taskgroup-cell-active{
+  background: var(--gray-100);
+  box-shadow: inset 0 -2px 0 var(--gray-300);
+  color: var(--gray-600);
+}
+.fzl-taskgroup-row-label{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+
+/* Art-Umschalter (Mehrfachauswahl-Checkbox-Menü) im Fertigstellungsliste-
+   Panel-Header, gleiche Optik wie der Tätigkeitsliste-Umschalter daneben. */
+.fzl-art-menu-item{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.fzl-art-menu-item input{ width: auto; margin: 0; }
 
 /* Griff (⠿) zum direkten Verschieben einer Spalte in der Tabellenansicht -
    greifen und auf eine andere Spaltenüberschrift ziehen, um die Reihenfolge
@@ -2711,6 +2942,85 @@ a{ text-decoration: none; color: inherit; }
   gap: 10px;
   padding: 4px 0;
   font-size: 12.5px;
+}
+
+/* Elemente-Seite: Nutzer-Wunsch "der ereich für den Masttafel Infport soll
+   in einem Übergeordneten Bereich namens Elemente geschoben werden" - Toolbar
+   für den generischen Import/Aktionen einer (nicht-Masttafel-)Elementen-
+   sammlung, im selben Stil wie die Fotos-Toolbar (.fo-toolbar). */
+.el-toolbar{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--gray-100);
+}
+.el-masttafel-hint{
+  padding: 6px 0;
+}
+
+/* Nutzer-Wunsch (Folgeturn 4): "unter Elemente nur die Namen der Element-
+   liste sehen ... erst wenn ich auf den Namen klicke öffnet sich das
+   Fenster" - Übersichtsliste aller Elementensammlungen (Masttafel + eigene),
+   je Zeile klickbar, öffnet die Detailansicht. */
+.el-sammlung-list{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.el-sammlung-row{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.el-sammlung-row:hover{
+  border-color: var(--blue);
+  background: var(--blue-light);
+}
+.el-sammlung-row-icon{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--gray-100);
+  color: var(--gray-600);
+  flex-shrink: 0;
+}
+.el-sammlung-row-main{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.el-sammlung-row-name{
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--gray-900);
+}
+.el-sammlung-row-sub{
+  font-size: 12px;
+  color: var(--gray-500);
+}
+.chev-mini-wrap{
+  display: flex;
+  align-items: center;
+  color: var(--gray-400);
+  flex-shrink: 0;
+}
+.el-back-link{
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 @media print{

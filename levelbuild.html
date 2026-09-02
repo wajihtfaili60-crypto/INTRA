@@ -166,6 +166,86 @@
           </button>
         </div>
       </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Tätigkeitenarten</span>
+          <span class="chev">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          </span>
+        </div>
+        <div class="panel-body">
+          <div class="subheading" style="margin-bottom:0;">Kategorien für Tätigkeiten anlegen und pflegen</div>
+          <div style="font-size:12px; color:var(--gray-500); margin-top:-8px;">
+            Ordnet jeder Tätigkeit eine Art zu (z. B. Einkauf, Lieferung, Ausführung). Diese Arten gehören keinem Projekt - sie werden automatisch komplett in ein Projekt übernommen, sobald dort eine Tätigkeitsliste hineingezogen wird, und lassen sich dort im "Tätigkeit bearbeiten"-Fenster je Tätigkeit zuweisen. In der Fertigstellungsliste lässt sich danach einzeln, in Summe oder in Kombination nach diesen Arten filtern.
+          </div>
+          <div id="ta-template-list"></div>
+          <div class="hr"></div>
+          <div class="field-row" style="align-items:flex-end;">
+            <div class="field">
+              <label>Neue Art</label>
+              <div class="input-wrap" style="display:flex; gap:8px;">
+                <input type="text" id="ta-template-new-name" placeholder="z. B. Einkauf" style="padding-right:10px;">
+              </div>
+            </div>
+            <div class="field" style="max-width:70px;">
+              <label>Farbe</label>
+              <div class="input-wrap"><input type="color" id="ta-template-new-color" value="#2f6fed" style="padding:2px; height:34px;"></div>
+            </div>
+          </div>
+          <button class="btn-primary" id="ta-template-add" style="align-self:flex-start;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Art anlegen
+          </button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Lieferanten</span>
+          <span class="chev">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          </span>
+        </div>
+        <div class="panel-body">
+          <div class="subheading" style="margin-bottom:0;">Lieferanten-Stammdaten anlegen und pflegen</div>
+          <div style="font-size:12px; color:var(--gray-500); margin-top:-8px;">
+            Diese Lieferanten gehören keinem Projekt - sie lassen sich bei jeder Bestellung im Bereich Einkauf auswählen, wodurch Name/Adresse/Kontakt automatisch übernommen (und dort pro Bestellung noch angepasst werden können).
+          </div>
+          <div id="lf-template-list"></div>
+          <button type="button" class="btn-primary" id="lf-template-add-btn" style="align-self:flex-start;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Lieferant hinzufügen
+          </button>
+        </div>
+      </div>
+
+      <!-- Nutzer-Wunsch (Folgeturn 3): "es gibt eine auswahl von
+           Elementenvorlagen die Projektübergeordnet schon angelegt wurden ...
+           dann muss dieses feste Format eingelesen werden" - genau wie die
+           Panels oben leben Elementenvorlagen projektübergreifend hier;
+           jede legt einmalig ein festes Spalten-Format fest (per Beispiel-
+           datei-Import), aus dem in einem Projekt unter "Elemente" dann eine
+           neue Elementensammlung erzeugt werden kann. -->
+      <div class="panel">
+        <div class="panel-header">
+          <span>Elementenvorlagen</span>
+          <span class="chev">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          </span>
+        </div>
+        <div class="panel-body">
+          <div class="subheading" style="margin-bottom:0;">Feste Formate für Elementensammlungen anlegen und pflegen</div>
+          <div style="font-size:12px; color:var(--gray-500); margin-top:-8px;">
+            Eine Elementenvorlage legt einmalig das feste Spalten-Format einer Elementensammlung fest (z. B. Schweißliste, Weichen-/Schwellen-Liste, Kabeltiefbau-Elemente) - erkannt aus der Kopfzeile einer Beispieldatei. Diese Vorlagen gehören keinem Projekt - im Bereich "Elemente" eines Projekts lässt sich daraus eine neue, projekteigene Sammlung anlegen, die künftig genau gegen dieses Format importiert (wie die Masttafel, nur mit einem eigenen Format).
+          </div>
+          <div id="et-template-list"></div>
+          <button type="button" class="btn-primary" id="et-template-add-btn" style="align-self:flex-start;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Elementenvorlage anlegen
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -272,6 +352,11 @@
         <span class="nav-label">Übersicht</span>
       </li>
 
+      <li class="nav-item" data-nav-page="elemente" onclick="levelbuildGo('elemente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="nav-label">Elemente</span>
+      </li>
+
       <li class="nav-item" data-nav-page="projekteinstellungen" onclick="levelbuildGo('projekteinstellungen')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1.03H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1.03H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1.03z"/></svg>
         <span class="nav-label">Projekteinstellungen</span>
@@ -297,7 +382,7 @@
         <span class="nav-label">Ereignisse</span>
       </li>
 
-      <li class="nav-item">
+      <li class="nav-item" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         <span class="nav-label">Fotos</span>
       </li>
@@ -320,6 +405,11 @@
       <li class="nav-item" data-nav-page="dokumente" onclick="levelbuildGo('dokumente')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
         <span class="nav-label">Dokumente</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="einkauf" onclick="levelbuildGo('einkauf')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span class="nav-label">Einkauf</span>
       </li>
 
       <li class="nav-item">
@@ -458,7 +548,7 @@
               </div>
             </span>
             <div class="panel-actions">
-              <span class="icon-btn" title="Vergrößern" data-expand-masttafel>
+              <span class="icon-btn" title="Vergrößern" data-goto-elemente-masttafel>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
               </span>
               <span class="icon-btn" title="Bearbeiten">
@@ -470,7 +560,7 @@
             </div>
           </div>
           <div class="panel-body" style="padding:0;">
-            <div class="masttafel-empty dropzone" id="matt-empty-compact" data-expand-masttafel>
+            <div class="masttafel-empty dropzone" id="matt-empty-compact" data-goto-elemente-masttafel>
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
               <span>Noch keine Daten vorhanden</span>
               <span class="hint">Datei hierher ziehen oder klicken, um Masttafel-Daten einzulesen</span>
@@ -484,134 +574,6 @@
 
     </div>
 
-    <!-- ===== Expanded Masttafel drill-in ===== -->
-    <div id="overview-expanded" style="display:none;">
-
-      <div class="back-link" data-collapse-masttafel>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-        Zurück zur Übersicht
-      </div>
-
-      <div class="panel">
-        <div class="panel-header">
-          <span>Allgemein</span>
-          <div class="panel-actions">
-            <span class="icon-btn" title="Bearbeiten">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
-            </span>
-            <span class="chev">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
-            </span>
-          </div>
-        </div>
-        <div class="panel-body two-col">
-          <div class="subcol">
-            <div class="subheading">Masttafel Datei</div>
-            <div class="masttafel-empty dropzone small" id="matt-datei-empty" data-import-trigger>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12"/><polyline points="7 8 12 3 17 8"/><path d="M5 21h14"/></svg>
-              <span>Datei hierher ziehen</span>
-              <span class="hint">oder klicken zum Hochladen – auch für weitere Versionen</span>
-            </div>
-            <div class="matt-import-hint" id="matt-import-hint" hidden></div>
-            <div class="file-list" id="matt-file-list"></div>
-          </div>
-          <div class="subcol">
-            <div class="subheading">Änderungen</div>
-            <div id="matt-changes-summary">
-              <div class="changelog-empty">Noch keine Änderungen vorhanden</div>
-            </div>
-            <button class="link-action" id="matt-open-report" disabled>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
-              Änderungsbericht öffnen
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel" style="margin-top:16px;">
-        <div class="panel-header">
-          <span class="panel-header-left">
-            <span>Masttafel</span>
-            <div class="segment-switcher ba-switcher">
-              <button class="segment-switcher-btn" type="button" data-toggle-segment-menu>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1.03H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1.03H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1.03z"/></svg>
-                <span class="segment-current">Bauabschnitt</span>
-                <svg class="chev-mini" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
-              <div class="segment-menu" hidden></div>
-            </div>
-          </span>
-          <div class="panel-actions">
-            <span class="icon-btn" title="Bearbeiten">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
-            </span>
-            <span class="icon-btn" title="Verkleinern" data-collapse-masttafel>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9h4V5"/><path d="M4 9l6-6"/><path d="M20 15h-4v4"/><path d="M20 15l-6 6"/></svg>
-            </span>
-            <span class="chev">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
-            </span>
-          </div>
-        </div>
-        <div class="matt-toolbar">
-          <div class="matt-toolbar-group">
-            <button class="matt-tool-btn" id="matt-zoom-out" title="Verkleinern">−</button>
-            <span class="matt-zoom-label" id="matt-zoom-label">100%</span>
-            <button class="matt-tool-btn" id="matt-zoom-in" title="Vergrößern">+</button>
-          </div>
-          <div class="matt-toolbar-group">
-            <button class="matt-tool-btn" id="matt-open-columns">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="10.5" y="3" width="7" height="18" rx="1"/><rect x="18" y="3" width="3" height="18" rx="1"/></svg>
-              Spalten
-            </button>
-            <div class="segment-switcher" id="matt-view-switcher">
-              <button class="segment-switcher-btn" type="button" data-toggle-segment-menu>
-                <span class="segment-current" id="matt-view-current">Standardansicht</span>
-                <svg class="chev-mini" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
-              <div class="segment-menu" hidden id="matt-view-menu">
-                <div class="segment-menu-item active" data-view="__default">Standardansicht</div>
-              </div>
-            </div>
-          </div>
-          <div class="matt-toolbar-group">
-            <label class="matt-toggle-label">
-              <span class="switch small" id="matt-allversions-switch"><span class="knob"></span></span>
-              Alle Versionen anzeigen
-            </label>
-          </div>
-          <div class="matt-toolbar-group" id="matt-filter-group" hidden>
-            <span class="matt-filter-status" id="matt-filter-status"></span>
-            <button class="matt-tool-btn" id="matt-clear-filters">Filter zurücksetzen</button>
-          </div>
-          <div class="matt-toolbar-group matt-selection-group" id="matt-selection-group" hidden>
-            <span class="matt-selection-status" id="matt-selection-status"></span>
-            <button class="matt-tool-btn matt-tool-btn-danger" id="matt-delete-selected">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-              Löschen
-            </button>
-          </div>
-          <div class="matt-toolbar-spacer"></div>
-          <div class="matt-toolbar-group">
-            <button class="matt-tool-btn" id="matt-open-report-2" disabled>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
-              Änderungsbericht
-            </button>
-          </div>
-        </div>
-        <div class="panel-body" style="padding:0;">
-          <div class="masttafel-empty dropzone large" id="matt-empty-expanded" data-import-trigger>
-            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
-            <span>Noch keine Daten vorhanden</span>
-            <span class="hint">Datei hierher ziehen oder klicken, um Masttafel-Daten einzulesen</span>
-          </div>
-          <div class="masttafel-imported" id="matt-imported-expanded" hidden>
-            <div class="masttafel-table-wrap full"></div>
-          </div>
-        </div>
-      </div>
-
-    </div>
   </div>
 </div>
 
@@ -717,6 +679,11 @@
         <span class="nav-label">Übersicht</span>
       </li>
 
+      <li class="nav-item" data-nav-page="elemente" onclick="levelbuildGo('elemente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="nav-label">Elemente</span>
+      </li>
+
       <li class="nav-item" data-nav-page="projekteinstellungen" onclick="levelbuildGo('projekteinstellungen')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1.03H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1.03H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1.03z"/></svg>
         <span class="nav-label">Projekteinstellungen</span>
@@ -742,7 +709,7 @@
         <span class="nav-label">Ereignisse</span>
       </li>
 
-      <li class="nav-item">
+      <li class="nav-item" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         <span class="nav-label">Fotos</span>
       </li>
@@ -765,6 +732,11 @@
       <li class="nav-item" data-nav-page="dokumente" onclick="levelbuildGo('dokumente')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
         <span class="nav-label">Dokumente</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="einkauf" onclick="levelbuildGo('einkauf')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span class="nav-label">Einkauf</span>
       </li>
 
       <li class="nav-item">
@@ -1032,6 +1004,11 @@
         <span class="nav-label">Übersicht</span>
       </li>
 
+      <li class="nav-item" data-nav-page="elemente" onclick="levelbuildGo('elemente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="nav-label">Elemente</span>
+      </li>
+
       <li class="nav-item active" data-nav-page="projekteinstellungen">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1.03H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1.03H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1.03z"/></svg>
         <span class="nav-label">Projekteinstellungen</span>
@@ -1057,7 +1034,7 @@
         <span class="nav-label">Ereignisse</span>
       </li>
 
-      <li class="nav-item">
+      <li class="nav-item" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         <span class="nav-label">Fotos</span>
       </li>
@@ -1080,6 +1057,11 @@
       <li class="nav-item" data-nav-page="dokumente" onclick="levelbuildGo('dokumente')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
         <span class="nav-label">Dokumente</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="einkauf" onclick="levelbuildGo('einkauf')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span class="nav-label">Einkauf</span>
       </li>
 
       <li class="nav-item">
@@ -1124,7 +1106,7 @@
 
   <!-- ===== Main content: Projekteinstellungen ===== -->
   <div class="main">
-    <div class="panel-col">
+    <div class="panel-col panel-col-grid">
 
       <div class="panel">
         <div class="panel-header">
@@ -1150,6 +1132,36 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Bauabschnitt hinzufügen
           </button>
+        </div>
+      </div>
+
+      <!-- Nutzer-Wunsch (Folgeturn 11): Datenpfad-Spalten in importierten
+           Excel-Dateien (Masttafel + Elementensammlungen) sollen echte
+           Dokumente automatisch am jeweiligen Standort/Element hinterlegen.
+           Da Browser aus Sicherheitsgründen nicht selbstständig auf einen
+           beliebigen lokalen Pfad zugreifen dürfen, muss der Nutzer einmalig
+           (pro Projekt) einen übergeordneten Ordner verknüpfen (File System
+           Access API) - danach werden Pfade relativ dazu aufgelöst. Siehe
+           dp-* Wiring in app.js. -->
+      <div class="panel">
+        <div class="panel-header">
+          <span>Dokumentenordner (Datenpfad-Import)</span>
+          <span class="chev">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          </span>
+        </div>
+        <div class="panel-body">
+          <div style="font-size:12px; color:var(--gray-500); margin-top:-8px;">
+            Excel-Spalten mit dem Namensschema „Datenpfad &lt;Dokumentname&gt;" (z. B. „Datenpfad Lagepläne") enthalten pro Zeile einen lokalen Datei- oder Ordnerpfad statt eines normalen Werts - sie werden nie als Tabellenspalte angezeigt. Beim Import wird die dort verlinkte Datei automatisch als echtes Dokument am jeweiligen Standort/Element hinterlegt (sichtbar unter „Verknüpfungen &rsaquo; Dokumente" sowie in der Handy-App). Dafür muss einmalig ein übergeordneter Ordner verknüpft werden, der diese Dateien enthält - nur in Chrome/Edge u. ä. verfügbar.
+          </div>
+          <div class="stat-row">
+            <div class="stat"><span class="stat-label">Verknüpfter Ordner</span><span class="stat-value" id="dp-ordner-status">Wird geprüft …</span></div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="btn-primary" id="dp-ordner-link" style="align-self:flex-start;">Ordner verknüpfen</button>
+            <button type="button" class="matt-tool-btn" id="dp-ordner-unlink" style="align-self:flex-start; display:none;">Verknüpfung entfernen</button>
+          </div>
+          <div id="dp-ordner-hint" style="font-size:12px; color:var(--gray-500); display:none;"></div>
         </div>
       </div>
 
@@ -1181,6 +1193,34 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             In dieses Projekt übernehmen
           </button>
+
+          <div class="hr"></div>
+          <div class="subheading" style="margin-bottom:0;">Automatische Zuordnung zu Standorten</div>
+          <div style="font-size:12px; color:var(--gray-500); margin-top:-4px;">
+            Regeln, mit denen eine der obigen Listen automatisch anhand von Masttafel-Werten zugeordnet wird (z. B. „Gründung – Zeichnung – Bauart ist gleich Bohrpfahl"). Wird von oben nach unten geprüft - die erste zutreffende Regel gewinnt. Einzelne Standorte lassen sich danach weiterhin auf der Mast-Detail-Seite oder per Mehrfachauswahl in der Masttafel manuell anpassen.
+          </div>
+          <div class="dok-table-wrap" id="mtr-wrap">
+            <table class="dok-table">
+              <thead>
+                <tr>
+                  <th style="width:44px;"></th>
+                  <th>Wenn</th>
+                  <th>Dann → Tätigkeitsliste</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="mtr-tbody"></tbody>
+            </table>
+          </div>
+          <div class="changelog-empty" id="mtr-empty" hidden>Noch keine Regeln angelegt - Standorte lassen sich weiterhin einzeln (Mast-Detail) oder per Mehrfachauswahl (Masttafel) zuordnen.</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn-primary" id="mtr-add" style="align-self:flex-start;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Regel hinzufügen
+            </button>
+            <button type="button" class="matt-tool-btn" id="mtr-apply" style="align-self:flex-start;">Regeln jetzt auf alle Standorte anwenden</button>
+          </div>
+          <div id="mtr-apply-hint" style="font-size:12px; color:var(--green); display:none;"></div>
         </div>
       </div>
 
@@ -1212,6 +1252,44 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             In dieses Projekt übernehmen
           </button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Bestelldaten (Einkauf)</span>
+          <span class="chev">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          </span>
+        </div>
+        <div class="panel-body">
+          <div style="font-size:12px; color:var(--gray-500); margin-top:-8px;">
+            Diese Angaben werden bei jeder neuen Bestellung im Bereich Einkauf automatisch vorbefüllt - lassen sich dort pro Bestellung aber noch überschreiben.
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Kostenstelle</label><div class="input-wrap"><input type="text" id="eke-kostenstelle"></div></div>
+            <div class="field"><label>Bauvorhaben</label><div class="input-wrap"><input type="text" id="eke-bauvorhaben"></div></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Einkäufer Name</label><div class="input-wrap"><input type="text" id="eke-einkaeufer-name"></div></div>
+            <div class="field"><label>Einkäufer Telefon</label><div class="input-wrap"><input type="text" id="eke-einkaeufer-telefon"></div></div>
+          </div>
+          <div class="field">
+            <label>Einkäufer E-Mail</label>
+            <div class="input-wrap"><input type="email" id="eke-einkaeufer-email"></div>
+          </div>
+          <div class="hr"></div>
+          <div class="subheading" style="margin-bottom:0;">Lieferanschrift (Baustelle)</div>
+          <div class="field-row">
+            <div class="field"><label>Firma</label><div class="input-wrap"><input type="text" id="eke-lieferanschrift-firma"></div></div>
+            <div class="field"><label>Zusatz</label><div class="input-wrap"><input type="text" id="eke-lieferanschrift-zusatz" placeholder="z. B. -- Baustelle --"></div></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Straße</label><div class="input-wrap"><input type="text" id="eke-lieferanschrift-strasse"></div></div>
+            <div class="field"><label>PLZ / Ort</label><div class="input-wrap"><input type="text" id="eke-lieferanschrift-plzort"></div></div>
+          </div>
+          <button type="button" class="btn-primary" id="eke-save" style="align-self:flex-start;">Speichern</button>
+          <div id="eke-saved-hint" style="font-size:12px; color:var(--green); display:none;">Gespeichert.</div>
         </div>
       </div>
 
@@ -1281,32 +1359,10 @@
 
       <div class="panel">
         <div class="panel-header">
-          <span>Statusoptionen</span>
-        </div>
-        <div class="panel-body">
-          <div style="font-size:12px; color:var(--gray-500); margin-top:-4px;">Gelten für alle Tätigkeiten dieser Liste - z. B. Nicht erledigt / In Arbeit / Erledigt, mit eigener Farbe und Symbol.</div>
-          <div id="tl-status-list" class="tl-status-list"></div>
-          <div class="field-row" style="align-items:flex-end;">
-            <div class="field">
-              <label>Bezeichnung</label>
-              <div class="input-wrap"><input type="text" id="tl-status-new-label" placeholder="z. B. In Arbeit"></div>
-            </div>
-            <div class="field" style="max-width:70px;">
-              <label>Farbe</label>
-              <div class="input-wrap"><input type="color" id="tl-status-new-color" value="#2f6fed" style="padding:2px; height:34px;"></div>
-            </div>
-            <div class="field" style="max-width:70px;">
-              <label>Symbol</label>
-              <div class="input-wrap"><input type="text" id="tl-status-new-icon" maxlength="2" placeholder="✓"></div>
-            </div>
-            <button class="matt-tool-btn" id="tl-status-add" style="height:34px;">Hinzufügen</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-header">
           <span>Tätigkeiten</span>
+        </div>
+        <div class="panel-body" style="padding:16px 16px 0;">
+          <div style="font-size:12px; color:var(--gray-500);">Statusoptionen (Nicht erledigt / In Arbeit / Erledigt, mit Farbe und Symbol) werden pro Tätigkeit festgelegt - beim Bearbeiten (Stift-Symbol) einer einzelnen Tätigkeit.</div>
         </div>
         <div class="panel-body" style="padding:0;">
           <div class="tl-task-table-wrap">
@@ -1315,6 +1371,7 @@
                 <tr>
                   <th style="width:56px;">Nr.</th>
                   <th>Titel</th>
+                  <th style="width:120px;">Art</th>
                   <th style="width:130px;">Frist</th>
                   <th style="width:150px;">Verantwortlich</th>
                   <th style="width:130px;">Dokumentation</th>
@@ -1587,6 +1644,11 @@
         <span class="nav-label">Übersicht</span>
       </li>
 
+      <li class="nav-item" data-nav-page="elemente" onclick="levelbuildGo('elemente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="nav-label">Elemente</span>
+      </li>
+
       <li class="nav-item disabled">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 12 11 14 15 9.5"/></svg>
         <span class="nav-label">Aufgaben</span>
@@ -1696,6 +1758,8 @@
             <div style="font-size:11.5px; color:var(--gray-500); margin-top:-6px;">
               Legt fest, welche Aufgaben in der Handy-App für genau diesen Mast angezeigt werden.
             </div>
+            <div id="md-tl-manual-hint" style="font-size:11.5px; color:var(--gray-500); margin-top:-2px;" hidden></div>
+            <button type="button" class="link-action" id="md-tl-individualize" style="align-self:flex-start;" hidden>Für diesen Standort individuell anpassen</button>
             <div id="md-tl-tasks"></div>
           </div>
         </div>
@@ -1749,11 +1813,11 @@
           </div>
           <div class="panel-body">
             <div class="link-tiles">
-              <div class="link-tile">
+              <div class="link-tile" id="md-dok-tile" style="cursor:pointer;">
                 <span class="link-tile-icon">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                 </span>
-                <span class="link-tile-count">0 Dokumente</span>
+                <span class="link-tile-count" id="md-dok-count">0 Dokumente</span>
               </div>
               <div class="link-tile">
                 <span class="link-tile-icon">
@@ -1784,6 +1848,242 @@
 </div>
 
 </div><!-- /page-mast-detail -->
+
+<!-- ======================================================================
+     Element-Detail: generisches Gegenstück zu page-mast-detail für einen
+     einzelnen Eintrag einer Nicht-Masttafel-Elementensammlung. Nutzer-Wunsch
+     (Folgeturn 9): "jedes Element in einer Liste ... muss aufgemacht werden
+     können genau wie wenn ich auf einen Mast klicke, dann auch die selbe
+     Maske" - dieselbe Panel-Struktur wie Mast-Detail (Datensätze mit
+     Versions-Chips + geänderte Felder hervorgehoben, Tätigkeitsliste-
+     Zuordnung), aber datengetrieben über sammlung.columns statt hart
+     codierter Mastdaten-Felder. Bewusst eine EIGENE, PARALLELE Seite statt
+     Wiederverwendung von page-mast-detail - Masttafel-Code bleibt dadurch
+     komplett unangetastet. Seit Folgeturn 10 ("mache alles auf einmal ...
+     übertrage sämtliche Logiken") spiegelt diese Seite zusätzlich auch
+     Allgemein-, Bauabweichung/Umplanung- und Verknüpfungen-Panel 1:1.
+     Die rechte "Datensätze" (Protokoll-ausgefüllt)-Karte von Mast-Detail
+     bleibt bewusst außen vor, da das Ausfüllen von Protokollen für
+     Elementensammlungen (außerhalb der Masttafel) in der Handy-App nach
+     wie vor nicht unterstützt wird, siehe Kommentar in app.js.
+     ====================================================================== -->
+<div class="spa-page" id="page-element-detail" data-title="Element · levelbuild">
+
+<div class="topbar-row1">
+  <div class="burger" data-collapse-sidebar><span></span><span></span><span></span></div>
+  <div class="logo">
+    <span class="mark"><span></span><span></span><span></span></span>
+    <span><span class="txt-level">level</span><span class="txt-build">build</span></span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="global-icons">
+    <button class="icon-btn" title="Benachrichtigungen">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="dot"></span>
+    </button>
+    <button class="icon-btn" title="Hilfe">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 1.7-2.4 3.7"/><line x1="12" y1="17" x2="12" y2="17.1"/></svg>
+    </button>
+    <div class="avatar" title="Wajih Tfaili">WT</div>
+  </div>
+</div>
+
+<div class="topbar-row2">
+  <a class="icon-btn" href="#elemente" title="Elemente">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9"/></svg>
+  </a>
+  <div class="breadcrumb">
+    <span class="chev">&rsaquo;</span>
+    <a class="crumb-link" href="#elemente">Elemente</a>
+    <span class="chev">&rsaquo;</span>
+    <span id="ed-crumb-sammlung">Sammlung</span>
+    <span class="chev">&rsaquo;</span>
+    <span class="current" id="ed-crumb-key">Element</span>
+  </div>
+  <div class="topbar-spacer"></div>
+</div>
+
+<div class="shell with-header2-nosubbar">
+  <div class="sidebar">
+    <div class="sidebar-title">
+      <span>Tab-Navigation</span>
+      <span class="collapse-btn" data-collapse-sidebar>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+      </span>
+    </div>
+    <div class="sidebar-scroll">
+    <ul class="nav-list">
+      <li class="nav-item" data-nav-page="uebersicht" onclick="levelbuildGo('uebersicht')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="nav-label">Übersicht</span>
+      </li>
+      <li class="nav-item" data-nav-page="elemente" onclick="levelbuildGo('elemente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="nav-label">Elemente</span>
+      </li>
+    </ul>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="overview-layout">
+
+      <div class="overview-col-left">
+
+        <!-- Nutzer-Wunsch (Folgeturn 10): "genau die selben Logiken ...
+             mache alles auf einmal" - spiegelt das Allgemein-Panel von
+             Mast-Detail 1:1 (Gesellschaft/Projekt/Bauabschnitt); "Bauwerk-
+             struktur" (bei Mast-Detail ohnehin nur ein statischer Platz-
+             halter, siehe dort) wird hier durch "Sammlung" ersetzt, da für
+             generische Elemente sinnvoller. -->
+        <div class="panel">
+          <div class="panel-header">
+            <span>Allgemein</span>
+            <div class="panel-actions">
+              <span class="icon-btn" title="Bearbeiten">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+              </span>
+              <span class="chev">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+              </span>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="stat-row">
+              <div class="stat">
+                <span class="stat-label">Gesellschaft</span>
+                <span class="stat-value empty">–</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Projekt</span>
+                <span class="stat-value" id="ed-projekt">–</span>
+              </div>
+            </div>
+            <div class="stat-row">
+              <div class="stat">
+                <span class="stat-label">Sammlung</span>
+                <span class="stat-value" id="ed-sammlung-name">–</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Bauabschnitt</span>
+                <span class="stat-value" id="ed-bauabschnitt">–</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:16px;">
+          <div class="panel-header">
+            <span class="panel-header-left">
+              <span>Datensätze</span>
+            </span>
+            <div class="panel-actions">
+              <span class="chev">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+              </span>
+            </div>
+          </div>
+          <div class="panel-body" id="ed-datensaetze-body">
+            <div class="changelog-empty">Diese Seite wurde nicht über eine Elementensammlung geöffnet - keine Daten vorhanden.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="overview-col-right">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-header-left">
+              <span>Tätigkeitsliste</span>
+              <span class="badge-mini" id="ed-taetigkeiten-count">0</span>
+            </span>
+            <div class="panel-actions">
+              <span class="chev">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+              </span>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="field" style="margin-bottom:4px;">
+              <label>Tätigkeitsliste für diesen Eintrag</label>
+              <div class="input-wrap"><select id="ed-tl-select"><option value="">–</option></select></div>
+            </div>
+            <div style="font-size:11.5px; color:var(--gray-500); margin-top:-6px;">
+              Legt fest, welche Aufgaben in der Handy-App für genau diesen Eintrag angezeigt werden.
+            </div>
+            <div id="ed-tl-manual-hint" style="font-size:11.5px; color:var(--gray-500); margin-top:-2px;" hidden></div>
+            <div id="ed-tl-tasks"></div>
+          </div>
+        </div>
+
+        <!-- Nutzer-Wunsch (Folgeturn 10): spiegelt Mast-Detail's Bauabweichung/
+             Umplanung-Panel 1:1 - eigene Funktion levelbuildAddManualElementVersion
+             (siehe app.js), damit levelbuildAddManualMastVersion unangetastet bleibt. -->
+        <div class="panel" style="margin-top:16px;">
+          <div class="panel-header">
+            <span class="panel-header-left">
+              <span>Bauabweichung / Umplanung</span>
+              <span class="badge-mini" id="ed-bauabweichung-count">0</span>
+            </span>
+          </div>
+          <div class="panel-body">
+            <div style="font-size:11.5px; color:var(--gray-500); margin-top:-4px;">
+              Für Änderungen durch Statik-Freigabe, E-Mail o. ä. - erzeugt eine neue Version dieses Eintrags mit dem Vermerk „Umplanung/Braunstrich" und optionalem Nachweis (z. B. E-Mail oder Statik-PDF).
+            </div>
+            <button class="btn-primary" id="ed-bauabweichung-add" style="align-self:flex-start;" disabled>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Bauabweichung erfassen
+            </button>
+            <div id="ed-bauabweichung-list"></div>
+          </div>
+        </div>
+
+        <!-- Nutzer-Wunsch (Folgeturn 10): spiegelt Mast-Detail's Verknüpfungen-
+             Panel 1:1 - dort sind die Kacheln (außer "Bautagebücher") ebenfalls
+             nicht dynamisch verdrahtet, siehe Kommentar in app.js dazu. -->
+        <div class="panel" style="margin-top:16px;">
+          <div class="panel-header">
+            <span>Verknüpfungen</span>
+            <span class="chev">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+            </span>
+          </div>
+          <div class="panel-body">
+            <div class="link-tiles">
+              <div class="link-tile" id="ed-dok-tile" style="cursor:pointer;">
+                <span class="link-tile-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </span>
+                <span class="link-tile-count" id="ed-dok-count">0 Dokumente</span>
+              </div>
+              <div class="link-tile">
+                <span class="link-tile-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l8 6v6c0 5-3.4 8.7-8 8-4.6.7-8-3-8-8V8z"/></svg>
+                </span>
+                <span class="link-tile-count">0 Ereignisse</span>
+              </div>
+              <div class="link-tile">
+                <span class="link-tile-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                </span>
+                <span class="link-tile-count">0 Fotos</span>
+              </div>
+              <div class="link-tile" onclick="levelbuildGo('bautagebuch-liste')" style="cursor:pointer;">
+                <span class="link-tile-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                </span>
+                <span class="link-tile-count">Bautagebücher</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</div><!-- /page-element-detail -->
 
 <!-- ======================================================================
      Bautagebücher: Liste aller Bautagebücher dieses Projekts
@@ -1848,6 +2148,11 @@
         <span class="nav-label">Übersicht</span>
       </li>
 
+      <li class="nav-item" data-nav-page="elemente" onclick="levelbuildGo('elemente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="nav-label">Elemente</span>
+      </li>
+
       <li class="nav-item active" data-nav-page="bautagebuch-liste" onclick="levelbuildGo('bautagebuch-liste')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         <span class="nav-label">Bautagebücher</span>
@@ -1856,6 +2161,16 @@
       <li class="nav-item" data-nav-page="dokumente" onclick="levelbuildGo('dokumente')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
         <span class="nav-label">Dokumente</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span class="nav-label">Fotos</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="einkauf" onclick="levelbuildGo('einkauf')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span class="nav-label">Einkauf</span>
       </li>
 
       <li class="nav-item disabled">
@@ -1950,6 +2265,11 @@
         <span class="nav-label">Übersicht</span>
       </li>
 
+      <li class="nav-item" data-nav-page="elemente" onclick="levelbuildGo('elemente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="nav-label">Elemente</span>
+      </li>
+
       <li class="nav-item" data-nav-page="bautagebuch-liste" onclick="levelbuildGo('bautagebuch-liste')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         <span class="nav-label">Bautagebücher</span>
@@ -1958,6 +2278,16 @@
       <li class="nav-item active" data-nav-page="dokumente" onclick="levelbuildGo('dokumente')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
         <span class="nav-label">Dokumente</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span class="nav-label">Fotos</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="einkauf" onclick="levelbuildGo('einkauf')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span class="nav-label">Einkauf</span>
       </li>
 
       <li class="nav-item disabled">
@@ -2029,6 +2359,651 @@
 </div>
 
 </div><!-- /page-dokumente -->
+
+<!-- ======================================================================
+     Fotos: EINE gebündelte Galerie über alle im Projekt tatsächlich
+     vorhandenen Fotos hinweg - egal ob über die allgemeine Fotos-Ablage
+     eines Standorts (Mast-Detail-Seite in der Handy-App, "durch die
+     Masttafel" erfasst, da jeder Standort aus einer eingelesenen Masttafel
+     stammt) oder als Foto-Baustein-Antwort innerhalb eines ausgefüllten
+     Protokolls angekommen ("und sonst wie ankommen"). Rein lesend - Fotos
+     selbst werden weiterhin nur in der Handy-App aufgenommen/gelöscht, hier
+     wird nur zusammengeführt/durchsucht/gefiltert. Siehe collectAllProjectFotos()
+     in app.js für die Zusammenführung. ====================================== -->
+<div class="spa-page" id="page-fotos" data-title="Fotos · levelbuild">
+
+<div class="topbar-row1">
+  <div class="burger" data-collapse-sidebar><span></span><span></span><span></span></div>
+  <div class="logo">
+    <span class="mark"><span></span><span></span><span></span></span>
+    <span><span class="txt-level">level</span><span class="txt-build">build</span></span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="global-icons">
+    <button class="icon-btn" title="Benachrichtigungen">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="dot"></span>
+    </button>
+    <button class="icon-btn" title="Hilfe">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 1.7-2.4 3.7"/><line x1="12" y1="17" x2="12" y2="17.1"/></svg>
+    </button>
+    <div class="avatar" title="Wajih Tfaili">WT</div>
+  </div>
+</div>
+
+<div class="topbar-row2">
+  <a class="icon-btn" href="#uebersicht" title="Projekte">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9"/></svg>
+  </a>
+  <div class="breadcrumb">
+    <span class="chev">&rsaquo;</span>
+    <a class="crumb-link" href="#uebersicht" id="fo-crumb-projekt">67 - Nordbrand Brauerei Sanierung</a>
+    <span class="chev">&rsaquo;</span>
+    <span class="current">Fotos</span>
+  </div>
+  <div class="topbar-spacer"></div>
+</div>
+
+<div class="shell with-header2-nosubbar">
+  <div class="sidebar">
+    <div class="sidebar-title">
+      <span>Tab-Navigation</span>
+      <span class="collapse-btn" data-collapse-sidebar>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+      </span>
+    </div>
+    <div class="sidebar-scroll">
+    <ul class="nav-list">
+
+      <li class="nav-item" data-nav-page="uebersicht" onclick="levelbuildGo('uebersicht')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="nav-label">Übersicht</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="elemente" onclick="levelbuildGo('elemente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="nav-label">Elemente</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="leistungsverzeichnis" onclick="levelbuildGo('leistungsverzeichnis')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 2h6a2 2 0 0 1 2 2v18l-5-3-5 3V4a2 2 0 0 1 2-2z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
+        <span class="nav-label">Leistungsverzeichnis</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="fertigstellungsliste" onclick="levelbuildGo('fertigstellungsliste')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="17" y2="12"/><polyline points="7 16 9 18 12.5 14.5"/></svg>
+        <span class="nav-label">Fertigstellungsliste</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="bautagebuch-liste" onclick="levelbuildGo('bautagebuch-liste')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span class="nav-label">Bautagebücher</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="dokumente" onclick="levelbuildGo('dokumente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+        <span class="nav-label">Dokumente</span>
+      </li>
+
+      <li class="nav-item active" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span class="nav-label">Fotos</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="einkauf" onclick="levelbuildGo('einkauf')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span class="nav-label">Einkauf</span>
+      </li>
+
+      <li class="nav-item disabled">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 12 11 14 15 9.5"/></svg>
+        <span class="nav-label">Aufgaben</span>
+      </li>
+
+      <li class="nav-item disabled">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span class="nav-label">Weitere Ansichten</span>
+      </li>
+
+    </ul>
+    </div>
+    <div class="sidebar-footer">
+      <ul class="nav-list">
+        <li class="nav-item">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
+          <span class="nav-label">Feed</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-header-left">
+          <span>Fotos</span>
+          <span class="badge-mini" id="fo-count">0</span>
+        </span>
+        <button class="link-action" id="fo-clear-filters">Filter zurücksetzen</button>
+      </div>
+      <div class="panel-body">
+        <div style="font-size:12px; color:var(--gray-500); margin-bottom:10px;">
+          Alle Fotos dieses Projekts an einer Stelle - sowohl die allgemeinen Standort-Fotos aus der Handy-App (Mast-Detail &rsaquo; Fotos) als auch Fotos, die als Teil eines ausgefüllten Protokolls aufgenommen wurden.
+        </div>
+        <div class="fo-toolbar">
+          <div class="fo-toolbar-group">
+            <label for="fo-filter-standort">Standort</label>
+            <select id="fo-filter-standort"><option value="">Alle Standorte</option></select>
+          </div>
+          <div class="fo-toolbar-group">
+            <label for="fo-filter-quelle">Quelle</label>
+            <select id="fo-filter-quelle">
+              <option value="">Alle Quellen</option>
+              <option value="standort">Standort-Foto</option>
+              <option value="protokoll">Protokoll-Foto</option>
+            </select>
+          </div>
+          <div class="fo-toolbar-group">
+            <label for="fo-sort">Sortieren</label>
+            <select id="fo-sort">
+              <option value="neu">Neueste zuerst</option>
+              <option value="alt">Älteste zuerst</option>
+              <option value="standort">Standort A-Z</option>
+            </select>
+          </div>
+          <div class="fo-toolbar-group fo-toolbar-search">
+            <label for="fo-search">Suche</label>
+            <input type="text" id="fo-search" placeholder="Standort, Tätigkeit, Protokoll…">
+          </div>
+        </div>
+        <div class="fo-grid" id="fo-grid"></div>
+        <div class="changelog-empty" id="fo-empty" hidden>Noch keine Fotos in diesem Projekt - Fotos entstehen in der Handy-App über Mast-Detail &rsaquo; Fotos oder beim Ausfüllen eines Protokolls mit einem Foto-Baustein.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /page-fotos -->
+
+<!-- ======================================================================
+     Elemente: Nutzer-Wunsch: "der ereich für den Masttafel Infport soll in
+     einem Übergeordneten Bereich namens Elemente geschoben werden. Die
+     Masttafel selber ist eine Elementensammlung ... Elementensammlung
+     Masttafel, Schweißliste, Weichen/Schwellen Liste, Kabeltiefbau Elemente
+     u.s.w." - Masttafel bleibt technisch unverändert (siehe Übersicht-Seite),
+     erscheint hier aber als erster, fester Eintrag einer Elementensammlung-
+     Auswahl. Weitere, frei benannte Elementensammlungen lassen sich hier
+     anlegen und per xlsx generisch importieren+versionieren (siehe
+     parseGenericElementSheet()/importGenericElementIntoStore() in app.js).
+     ====================================================================== -->
+<div class="spa-page" id="page-elemente" data-title="Elemente · levelbuild">
+
+<div class="topbar-row1">
+  <div class="burger" data-collapse-sidebar><span></span><span></span><span></span></div>
+  <div class="logo">
+    <span class="mark"><span></span><span></span><span></span></span>
+    <span><span class="txt-level">level</span><span class="txt-build">build</span></span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="global-icons">
+    <button class="icon-btn" title="Benachrichtigungen">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="dot"></span>
+    </button>
+    <button class="icon-btn" title="Hilfe">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 1.7-2.4 3.7"/><line x1="12" y1="17" x2="12" y2="17.1"/></svg>
+    </button>
+    <div class="avatar" title="Wajih Tfaili">WT</div>
+  </div>
+</div>
+
+<div class="topbar-row2">
+  <a class="icon-btn" href="#uebersicht" title="Projekte">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9"/></svg>
+  </a>
+  <div class="breadcrumb">
+    <span class="chev">&rsaquo;</span>
+    <a class="crumb-link" href="#uebersicht" id="el-crumb-projekt">67 - Nordbrand Brauerei Sanierung</a>
+    <span class="chev">&rsaquo;</span>
+    <span class="current">Elemente</span>
+  </div>
+  <div class="topbar-spacer"></div>
+</div>
+
+<div class="shell with-header2-nosubbar">
+  <div class="sidebar">
+    <div class="sidebar-title">
+      <span>Tab-Navigation</span>
+      <span class="collapse-btn" data-collapse-sidebar>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+      </span>
+    </div>
+    <div class="sidebar-scroll">
+    <ul class="nav-list">
+
+      <li class="nav-item" data-nav-page="uebersicht" onclick="levelbuildGo('uebersicht')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="nav-label">Übersicht</span>
+      </li>
+
+      <li class="nav-item active" data-nav-page="elemente" onclick="levelbuildGo('elemente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="nav-label">Elemente</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="leistungsverzeichnis" onclick="levelbuildGo('leistungsverzeichnis')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 2h6a2 2 0 0 1 2 2v18l-5-3-5 3V4a2 2 0 0 1 2-2z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
+        <span class="nav-label">Leistungsverzeichnis</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="fertigstellungsliste" onclick="levelbuildGo('fertigstellungsliste')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="17" y2="12"/><polyline points="7 16 9 18 12.5 14.5"/></svg>
+        <span class="nav-label">Fertigstellungsliste</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="bautagebuch-liste" onclick="levelbuildGo('bautagebuch-liste')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span class="nav-label">Bautagebücher</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="dokumente" onclick="levelbuildGo('dokumente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+        <span class="nav-label">Dokumente</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span class="nav-label">Fotos</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="einkauf" onclick="levelbuildGo('einkauf')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span class="nav-label">Einkauf</span>
+      </li>
+
+      <li class="nav-item disabled">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 12 11 14 15 9.5"/></svg>
+        <span class="nav-label">Aufgaben</span>
+      </li>
+
+      <li class="nav-item disabled">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span class="nav-label">Weitere Ansichten</span>
+      </li>
+
+    </ul>
+    </div>
+    <div class="sidebar-footer">
+      <ul class="nav-list">
+        <li class="nav-item">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
+          <span class="nav-label">Feed</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-header-left">
+          <span>Elemente</span>
+        </span>
+        <span style="display:flex; align-items:center; gap:10px;">
+          <button class="btn-primary" id="el-add-sammlung" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Neue Elementensammlung
+          </button>
+        </span>
+      </div>
+      <div class="panel-body">
+        <div style="font-size:12px; color:var(--gray-500); margin-bottom:4px;">
+          Elemente bündelt alle importierten Bauteil-/Datensätze dieses Projekts als einzelne <strong>Elementensammlungen</strong> - die Masttafel ist die erste, feste Elementensammlung; weitere (z.&nbsp;B. Schweißliste, Weichen-/Schwellenliste, Kabeltiefbau-Elemente) lassen sich hier frei anlegen und per xlsx-Datei befüllen, mit derselben zeilenweisen Versionierung wie die Masttafel.
+        </div>
+        <div id="el-content"></div>
+
+        <!-- Nutzer-Wunsch (Folgeturn 5): "wenn man auf Masttafel klickt will
+             ich wirklich das sich diese Maske hier öffnet" - der reale
+             Masttafel-Block (vormals auf der Übersicht-Seite unter
+             #overview-expanded) lebt jetzt fest hier auf der Elemente-Seite,
+             als statisches, dauerhaft im DOM stehendes Element (nur per
+             style.display umgeschaltet, NIE per innerHTML neu gebaut) -
+             genau deshalb funktioniert die bestehende, unveränderte
+             Masttafel-Logik in app.js unverändert weiter, unabhängig davon,
+             auf welcher Seite dieser Block gerade sichtbar ist. -->
+        <div id="overview-expanded" style="display:none;">
+
+          <div class="back-link" id="matt-panel-back-link" data-collapse-masttafel>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            Zurück zur Übersicht
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <span>Allgemein</span>
+              <div class="panel-actions">
+                <span class="icon-btn" title="Bearbeiten">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+                </span>
+                <span class="chev">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+                </span>
+              </div>
+            </div>
+            <div class="panel-body two-col">
+              <div class="subcol">
+                <div class="subheading">Masttafel Datei</div>
+                <div class="masttafel-empty dropzone small" id="matt-datei-empty" data-import-trigger>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12"/><polyline points="7 8 12 3 17 8"/><path d="M5 21h14"/></svg>
+                  <span>Datei hierher ziehen</span>
+                  <span class="hint">oder klicken zum Hochladen – auch für weitere Versionen</span>
+                </div>
+                <div class="matt-import-hint" id="matt-import-hint" hidden></div>
+                <div class="file-list" id="matt-file-list"></div>
+              </div>
+              <div class="subcol">
+                <div class="subheading">Änderungen</div>
+                <div id="matt-changes-summary">
+                  <div class="changelog-empty">Noch keine Änderungen vorhanden</div>
+                </div>
+                <button class="link-action" id="matt-open-report" disabled>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+                  Änderungsbericht öffnen
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel" style="margin-top:16px;">
+            <div class="panel-header">
+              <span class="panel-header-left">
+                <span>Masttafel</span>
+                <div class="segment-switcher ba-switcher">
+                  <button class="segment-switcher-btn" type="button" data-toggle-segment-menu>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1.03H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1.03H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1.03z"/></svg>
+                    <span class="segment-current">Bauabschnitt</span>
+                    <svg class="chev-mini" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                  <div class="segment-menu" hidden></div>
+                </div>
+              </span>
+              <div class="panel-actions">
+                <span class="icon-btn" title="Bearbeiten">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+                </span>
+                <span class="icon-btn" title="Verkleinern" id="matt-panel-collapse-icon" data-collapse-masttafel>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9h4V5"/><path d="M4 9l6-6"/><path d="M20 15h-4v4"/><path d="M20 15l-6 6"/></svg>
+                </span>
+                <span class="chev">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+                </span>
+              </div>
+            </div>
+            <div class="matt-toolbar">
+              <div class="matt-toolbar-group">
+                <button class="matt-tool-btn" id="matt-zoom-out" title="Verkleinern">−</button>
+                <span class="matt-zoom-label" id="matt-zoom-label">100%</span>
+                <button class="matt-tool-btn" id="matt-zoom-in" title="Vergrößern">+</button>
+              </div>
+              <div class="matt-toolbar-group">
+                <button class="matt-tool-btn" id="matt-open-columns">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="10.5" y="3" width="7" height="18" rx="1"/><rect x="18" y="3" width="3" height="18" rx="1"/></svg>
+                  Spalten
+                </button>
+                <div class="segment-switcher" id="matt-view-switcher">
+                  <button class="segment-switcher-btn" type="button" data-toggle-segment-menu>
+                    <span class="segment-current" id="matt-view-current">Standardansicht</span>
+                    <svg class="chev-mini" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                  <div class="segment-menu" hidden id="matt-view-menu">
+                    <div class="segment-menu-item active" data-view="__default">Standardansicht</div>
+                  </div>
+                </div>
+              </div>
+              <div class="matt-toolbar-group">
+                <label class="matt-toggle-label">
+                  <span class="switch small" id="matt-allversions-switch"><span class="knob"></span></span>
+                  Alle Versionen anzeigen
+                </label>
+              </div>
+              <div class="matt-toolbar-group" id="matt-filter-group" hidden>
+                <span class="matt-filter-status" id="matt-filter-status"></span>
+                <button class="matt-tool-btn" id="matt-clear-filters">Filter zurücksetzen</button>
+              </div>
+              <div class="matt-toolbar-group matt-selection-group" id="matt-selection-group" hidden>
+                <span class="matt-selection-status" id="matt-selection-status"></span>
+                <button class="matt-tool-btn" id="matt-assign-tl-selected">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                  Tätigkeitsliste zuordnen
+                </button>
+                <button class="matt-tool-btn matt-tool-btn-danger" id="matt-delete-selected">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                  Löschen
+                </button>
+              </div>
+              <div class="matt-toolbar-spacer"></div>
+              <div class="matt-toolbar-group">
+                <button class="matt-tool-btn" id="matt-open-report-2" disabled>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+                  Änderungsbericht
+                </button>
+              </div>
+            </div>
+            <div class="panel-body" style="padding:0;">
+              <div class="masttafel-empty dropzone large" id="matt-empty-expanded" data-import-trigger>
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+                <span>Noch keine Daten vorhanden</span>
+                <span class="hint">Datei hierher ziehen oder klicken, um Masttafel-Daten einzulesen</span>
+              </div>
+              <div class="masttafel-imported" id="matt-imported-expanded" hidden>
+                <div class="masttafel-table-wrap full"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /page-elemente -->
+
+<!-- ======================================================================
+     Einkauf: Material-Positionen anlegen, Standorten (Masten) zuordnen und
+     als eingekauft markieren. Der Einkaufsbericht (PDF) listet alle als
+     eingekauft markierten Positionen - siehe downloadEinkaufsberichtPDF.
+     ====================================================================== -->
+<div class="spa-page" id="page-einkauf" data-title="Einkauf · levelbuild">
+
+<div class="topbar-row1">
+  <div class="burger" data-collapse-sidebar><span></span><span></span><span></span></div>
+  <div class="logo">
+    <span class="mark"><span></span><span></span><span></span></span>
+    <span><span class="txt-level">level</span><span class="txt-build">build</span></span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="global-icons">
+    <button class="icon-btn" title="Benachrichtigungen">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="dot"></span>
+    </button>
+    <button class="icon-btn" title="Hilfe">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 1.7-2.4 3.7"/><line x1="12" y1="17" x2="12" y2="17.1"/></svg>
+    </button>
+    <div class="avatar" title="Wajih Tfaili">WT</div>
+  </div>
+</div>
+
+<div class="topbar-row2">
+  <a class="icon-btn" href="#uebersicht" title="Projekte">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9"/></svg>
+  </a>
+  <div class="breadcrumb">
+    <span class="chev">&rsaquo;</span>
+    <a class="crumb-link" href="#uebersicht" id="ek-crumb-projekt">67 - Nordbrand Brauerei Sanierung</a>
+    <span class="chev">&rsaquo;</span>
+    <span class="current">Einkauf</span>
+  </div>
+  <div class="topbar-spacer"></div>
+</div>
+
+<div class="shell with-header2-nosubbar">
+  <div class="sidebar">
+    <div class="sidebar-title">
+      <span>Tab-Navigation</span>
+      <span class="collapse-btn" data-collapse-sidebar>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+      </span>
+    </div>
+    <div class="sidebar-scroll">
+    <ul class="nav-list">
+
+      <li class="nav-item" data-nav-page="uebersicht" onclick="levelbuildGo('uebersicht')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="nav-label">Übersicht</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="elemente" onclick="levelbuildGo('elemente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="nav-label">Elemente</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="leistungsverzeichnis" onclick="levelbuildGo('leistungsverzeichnis')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 2h6a2 2 0 0 1 2 2v18l-5-3-5 3V4a2 2 0 0 1 2-2z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
+        <span class="nav-label">Leistungsverzeichnis</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="fertigstellungsliste" onclick="levelbuildGo('fertigstellungsliste')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="17" y2="12"/><polyline points="7 16 9 18 12.5 14.5"/></svg>
+        <span class="nav-label">Fertigstellungsliste</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="bautagebuch-liste" onclick="levelbuildGo('bautagebuch-liste')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span class="nav-label">Bautagebücher</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="dokumente" onclick="levelbuildGo('dokumente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+        <span class="nav-label">Dokumente</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span class="nav-label">Fotos</span>
+      </li>
+
+      <li class="nav-item active" data-nav-page="einkauf" onclick="levelbuildGo('einkauf')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span class="nav-label">Einkauf</span>
+      </li>
+
+      <li class="nav-item disabled">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 12 11 14 15 9.5"/></svg>
+        <span class="nav-label">Aufgaben</span>
+      </li>
+
+    </ul>
+    </div>
+    <div class="sidebar-footer">
+      <ul class="nav-list">
+        <li class="nav-item">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
+          <span class="nav-label">Feed</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-header-left">
+          <span>Einkauf</span>
+          <span class="badge-mini" id="ek-count">0</span>
+        </span>
+        <span style="display:flex; gap:8px; align-items:center;">
+          <button class="link-action" id="ek-clear-filters">Filter zurücksetzen</button>
+          <button class="btn-primary" id="ek-bestellung-btn" disabled>Bestellung erstellen (0)</button>
+          <button class="btn-primary" id="ek-add-btn">+ Position hinzufügen</button>
+        </span>
+      </div>
+      <div class="panel-body">
+        <div style="font-size:12px; color:var(--gray-500); margin-bottom:4px;">
+          Material-Positionen für dieses Projekt - je Position lassen sich ein oder mehrere Masten/Standorte zuordnen. Offene Positionen ankreuzen und "Bestellung erstellen" wählen, um sie zu einer Bestellung (PDF) zu bündeln - sie gelten danach als bestellt.
+        </div>
+        <div class="dok-table-wrap" id="ek-wrap">
+          <table class="dok-table">
+            <thead>
+              <tr>
+                <th style="width:32px;"></th>
+                <th>Material</th>
+                <th>Menge</th>
+                <th>Einheit</th>
+                <th>Standorte</th>
+                <th>Notiz</th>
+                <th>Status</th>
+                <th>Bestellung</th>
+                <th></th>
+              </tr>
+              <tr class="dok-filter-row">
+                <th></th>
+                <th><input type="text" data-ek-filter="material" placeholder="Filtern…"></th>
+                <th></th>
+                <th></th>
+                <th><input type="text" data-ek-filter="standort" placeholder="Filtern…"></th>
+                <th></th>
+                <th>
+                  <select data-ek-filter="status">
+                    <option value="">Alle</option>
+                    <option value="offen">Offen</option>
+                    <option value="bestellt">Bestellt</option>
+                  </select>
+                </th>
+                <th></th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="ek-tbody"></tbody>
+          </table>
+        </div>
+        <div class="changelog-empty" id="ek-empty" hidden>Noch keine Einkaufspositionen angelegt.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-header-left">
+          <span>Bestellungen</span>
+          <span class="badge-mini" id="ekb-count">0</span>
+        </span>
+      </div>
+      <div class="panel-body">
+        <div style="font-size:12px; color:var(--gray-500); margin-bottom:4px;">
+          Aus Positionen erstellte Bestellungen - je Bestellung lässt sich das PDF jederzeit erneut herunterladen.
+        </div>
+        <div class="dok-table-wrap" id="ekb-wrap">
+          <table class="dok-table">
+            <thead>
+              <tr>
+                <th>Bestellnummer</th>
+                <th>Datum</th>
+                <th>Lieferant</th>
+                <th>Positionen</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="ekb-tbody"></tbody>
+          </table>
+        </div>
+        <div class="changelog-empty" id="ekb-empty" hidden>Noch keine Bestellungen erstellt.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /page-einkauf -->
 
 <!-- ======================================================================
      Bautagebuch-Detail: einzelnes Bautagebuch (Bautagesbericht, Druckbericht,
@@ -2430,6 +3405,11 @@
         <span class="nav-label">Übersicht</span>
       </li>
 
+      <li class="nav-item" data-nav-page="elemente" onclick="levelbuildGo('elemente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="nav-label">Elemente</span>
+      </li>
+
       <li class="nav-item active" data-nav-page="leistungsverzeichnis" onclick="levelbuildGo('leistungsverzeichnis')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 2h6a2 2 0 0 1 2 2v18l-5-3-5 3V4a2 2 0 0 1 2-2z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
         <span class="nav-label">Leistungsverzeichnis</span>
@@ -2448,6 +3428,16 @@
       <li class="nav-item" data-nav-page="dokumente" onclick="levelbuildGo('dokumente')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
         <span class="nav-label">Dokumente</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span class="nav-label">Fotos</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="einkauf" onclick="levelbuildGo('einkauf')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span class="nav-label">Einkauf</span>
       </li>
 
       <li class="nav-item disabled">
@@ -2569,6 +3559,11 @@
         <span class="nav-label">Übersicht</span>
       </li>
 
+      <li class="nav-item" data-nav-page="elemente" onclick="levelbuildGo('elemente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="nav-label">Elemente</span>
+      </li>
+
       <li class="nav-item" data-nav-page="leistungsverzeichnis" onclick="levelbuildGo('leistungsverzeichnis')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 2h6a2 2 0 0 1 2 2v18l-5-3-5 3V4a2 2 0 0 1 2-2z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
         <span class="nav-label">Leistungsverzeichnis</span>
@@ -2587,6 +3582,16 @@
       <li class="nav-item" data-nav-page="dokumente" onclick="levelbuildGo('dokumente')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
         <span class="nav-label">Dokumente</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span class="nav-label">Fotos</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="einkauf" onclick="levelbuildGo('einkauf')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span class="nav-label">Einkauf</span>
       </li>
 
       <li class="nav-item disabled">
@@ -2621,6 +3626,14 @@
               </button>
               <div class="segment-menu" hidden></div>
             </div>
+            <div class="segment-switcher fzl-art-switcher" hidden>
+              <button class="segment-switcher-btn" type="button" data-toggle-segment-menu>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><path d="M12 2 2 12l10 10 10-10L12 2z"/></svg>
+                <span class="segment-current">Alle Arten</span>
+                <svg class="chev-mini" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="segment-menu" hidden></div>
+            </div>
             <span class="fzl-active-view-label" id="fzl-active-view-label">Ansicht: Alle Spalten</span>
           </span>
           <div class="panel-actions">
@@ -2650,7 +3663,7 @@
 <script src="app.js"></script>
 <script>
 (function () {
-  var PAGES = ['projekte', 'uebersicht', 'formular', 'projekteinstellungen', 'mast-detail', 'taetigkeitsliste', 'protokoll', 'bautagebuch-liste', 'bautagebuch-detail', 'leistungsverzeichnis', 'fertigstellungsliste', 'dokumente'];
+  var PAGES = ['projekte', 'uebersicht', 'elemente', 'formular', 'projekteinstellungen', 'mast-detail', 'element-detail', 'taetigkeitsliste', 'protokoll', 'bautagebuch-liste', 'bautagebuch-detail', 'leistungsverzeichnis', 'fertigstellungsliste', 'dokumente', 'fotos', 'einkauf'];
 
   function showPage(name) {
     if (PAGES.indexOf(name) === -1) name = 'projekte';
@@ -2678,6 +3691,7 @@
     if (name === 'uebersicht' && window.levelbuildOnShowUebersicht) window.levelbuildOnShowUebersicht();
     if (name === 'projekteinstellungen' && window.levelbuildOnShowProjekteinstellungen) window.levelbuildOnShowProjekteinstellungen();
     if (name === 'mast-detail' && window.levelbuildMastDetailRender) window.levelbuildMastDetailRender();
+    if (name === 'element-detail' && window.levelbuildElementDetailRender) window.levelbuildElementDetailRender();
     if (name === 'taetigkeitsliste' && window.levelbuildOnShowTaetigkeitsliste) window.levelbuildOnShowTaetigkeitsliste();
     if (name === 'protokoll' && window.levelbuildOnShowProtokoll) window.levelbuildOnShowProtokoll();
     if (name === 'bautagebuch-liste' && window.levelbuildOnShowBautagebuchListe) window.levelbuildOnShowBautagebuchListe();
@@ -2685,6 +3699,9 @@
     if (name === 'leistungsverzeichnis' && window.levelbuildOnShowLeistungsverzeichnis) window.levelbuildOnShowLeistungsverzeichnis();
     if (name === 'fertigstellungsliste' && window.levelbuildOnShowFertigstellungsliste) window.levelbuildOnShowFertigstellungsliste();
     if (name === 'dokumente' && window.levelbuildOnShowDokumente) window.levelbuildOnShowDokumente();
+    if (name === 'fotos' && window.levelbuildOnShowFotos) window.levelbuildOnShowFotos();
+    if (name === 'elemente' && window.levelbuildOnShowElemente) window.levelbuildOnShowElemente();
+    if (name === 'einkauf' && window.levelbuildOnShowEinkauf) window.levelbuildOnShowEinkauf();
     // Also refresh the Vorlagen tab's Protokoll list/select whenever we land
     // back on Projekte, in case a Protokoll was renamed/deleted elsewhere.
     if (name === 'projekte' && window.levelbuildOnShowProjekteVorlagen) window.levelbuildOnShowProjekteVorlagen();

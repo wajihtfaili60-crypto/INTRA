@@ -42,6 +42,87 @@
       </div>
 
       <!-- ============================================================
+           SCREEN: Elemente-Auswahl - Nutzer-Wunsch (Folgeturn 8): "die App
+           hat dann in einem Projekt natürlich die Option die verschiedenen
+           Elementlisten aufzumachen ... momentan öffnet sich ja immer
+           direkt die Masttafel". Zeigt Masttafel + alle Elementensammlungen
+           des Projekts (siehe loadElementensammlungen() in app.js) zur
+           Auswahl, bevor es weitergeht - ersetzt den bisherigen direkten
+           Sprung von der Projekt-Auswahl in die Masttafel-Liste.
+           ============================================================ -->
+      <div class="ha-screen" id="ha-screen-elemente">
+        <div class="ha-topbar">
+          <button type="button" class="ha-back-btn" data-ha-back="ha-screen-projekte">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div class="ha-topbar-texts">
+            <div class="ha-topbar-title" id="ha-el-projekt-name">Elemente</div>
+            <div class="ha-topbar-sub">Elementensammlung wählen</div>
+          </div>
+        </div>
+        <div class="ha-body-scroll">
+          <div class="ha-list" id="ha-el-list"></div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           SCREEN: Elemente-Liste - generische Einträge-Liste einer
+           Nicht-Masttafel-Elementensammlung (gleiches Muster wie die
+           Masttafel-Liste unten, aber datengetrieben über die feste
+           Spaltenkonfiguration der jeweiligen Sammlung statt hart codiert).
+           ============================================================ -->
+      <div class="ha-screen" id="ha-screen-el-liste">
+        <div class="ha-topbar">
+          <button type="button" class="ha-back-btn" data-ha-back="ha-screen-elemente">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div class="ha-topbar-texts">
+            <div class="ha-topbar-title" id="ha-el-liste-sammlung-name">Sammlung</div>
+            <div class="ha-topbar-sub">Elemente</div>
+          </div>
+        </div>
+        <div class="ha-search-wrap">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="ha-el-liste-search" placeholder="Eintrag suchen…">
+        </div>
+        <div class="ha-chip-row" id="ha-el-liste-bauabschnitt-chips"></div>
+        <div class="ha-body-scroll">
+          <div class="ha-list" id="ha-el-liste-list"></div>
+          <div class="ha-empty" id="ha-el-liste-empty" hidden>Keine Daten gefunden. Bitte zuerst in der Hauptseite unter Elemente eine Datei importieren.</div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           SCREEN: Element-Detail - generisches Gegenstück zur Mast-Detail-
+           Seite (3 Tabs), für einen Eintrag einer Nicht-Masttafel-
+           Elementensammlung. Nutzt die parallelen, generischen Stores
+           ELEMENT_TL_ASSIGNMENT_KEY/ELEMENT_TASK_STATUS_KEY/
+           ELEMENT_TASK_ABSCHLUSS_KEY/ELEMENT_FOTOS_KEY (siehe app.js) statt
+           der Masttafel-eigenen - die Masttafel-Seiten bleiben unverändert.
+           ============================================================ -->
+      <div class="ha-screen" id="ha-screen-el-detail">
+        <div class="ha-topbar">
+          <button type="button" class="ha-back-btn" data-ha-back="ha-screen-el-liste">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div class="ha-topbar-texts">
+            <div class="ha-topbar-title" id="ha-el-detail-title">Element</div>
+            <div class="ha-topbar-sub" id="ha-el-detail-sub">–</div>
+          </div>
+        </div>
+        <div class="ha-tabbar">
+          <button type="button" class="ha-el-tab active" data-ha-el-tab="datensaetze">Datensätze</button>
+          <button type="button" class="ha-el-tab" data-ha-el-tab="taetigkeitsliste">Tätigkeitsliste</button>
+          <button type="button" class="ha-el-tab" data-ha-el-tab="fotos">Fotos &amp; Dokumente</button>
+        </div>
+        <div class="ha-body-scroll">
+          <div class="ha-tabpanel active" id="ha-el-tabpanel-datensaetze"></div>
+          <div class="ha-tabpanel" id="ha-el-tabpanel-taetigkeitsliste"></div>
+          <div class="ha-tabpanel" id="ha-el-tabpanel-fotos"></div>
+        </div>
+      </div>
+
+      <!-- ============================================================
            SCREEN: Masttafel (Mastnummern-Liste eines Projekts)
            ============================================================ -->
       <div class="ha-screen" id="ha-screen-masttafel">
@@ -120,6 +201,29 @@
         </button>
         <img id="ha-lightbox-img" src="" alt="">
         <button type="button" class="ha-btn-danger-ghost" id="ha-lightbox-delete">Foto löschen</button>
+      </div>
+
+      <!-- ============================================================
+           OVERLAY: Dokument-Viewer (per Datenpfad-Import automatisch
+           hinterlegte Dokumente werden hier direkt IN der App angezeigt
+           statt nur zum Download angeboten - Bilder als <img>, PDFs als
+           eingebettetes <iframe> auf die data:-URL, alles andere zeigt
+           einen Hinweis + Download-Button als Fallback, siehe
+           openDpDocViewer() in handyapp.js.
+           ============================================================ -->
+      <div class="ha-overlay" id="ha-overlay-dokument" hidden>
+        <div class="ha-topbar">
+          <button type="button" class="ha-back-btn" id="ha-dok-viewer-close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <div class="ha-topbar-texts">
+            <div class="ha-topbar-title" id="ha-dok-viewer-title">Dokument</div>
+          </div>
+          <a class="ha-back-btn" id="ha-dok-viewer-download" download title="Herunterladen">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>
+          </a>
+        </div>
+        <div class="ha-dok-viewer-body" id="ha-dok-viewer-body"></div>
       </div>
 
       <!-- ============================================================
