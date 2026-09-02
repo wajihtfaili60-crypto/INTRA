@@ -168,14 +168,45 @@
   }
 
   function scheduleUpload(key, value) {
-    if (pendingUploads[key]) clearTimeout(pendingUploads[key]);
-    pendingUploads[key] = setTimeout(function () {
+    if (pendingUploads[key]) clearTimeout(pendingUploads[key].timer);
+    var entry = { value: value, timer: null };
+    entry.timer = setTimeout(function () {
       delete pendingUploads[key];
       uploadKey(key, value).catch(function (e) {
         console.warn('Intra-Sync: Hochladen fehlgeschlagen für', key, e);
       });
     }, 700);
+    pendingUploads[key] = entry;
   }
+
+  // Nutzer-gemeldeter Bug: ein Foto in einem Protokoll aufgenommen und eine
+  // Tätigkeit abgehakt, lokal auf dem Handy blieb es erhalten, in der Cloud
+  // (und damit auf der Web-Version) kam es aber nie an, ganz ohne
+  // Fehlermeldung. Ursache: scheduleUpload() wartet bewusst 700ms, bevor der
+  // eigentliche Upload überhaupt startet (mehrere schnelle Änderungen am
+  // selben Schlüssel sollen sich zu einem Upload bündeln) - verlässt man die
+  // Seite (App-Wechsel, Bildschirm sperren, Tab schließen) innerhalb dieser
+  // 700ms, pausiert/verwirft der Browser diesen Timer, der Upload startet
+  // dann nie. Deshalb hier zusätzlich: sobald die Seite in den Hintergrund
+  // geht oder geschlossen wird, alle noch wartenden Uploads SOFORT auslösen,
+  // statt auf den Timer zu warten. Keine 100%-Garantie (ein bereits
+  // begonnener Netzwerk-Request kann bei einem harten Schließen trotzdem
+  // abbrechen), aber deckt den weit häufigeren Fall ab, dass die Seite nach
+  // dem Speichern normal verlassen/in den Hintergrund geschickt wird.
+  function flushPendingUploads() {
+    Object.keys(pendingUploads).forEach(function (key) {
+      var entry = pendingUploads[key];
+      clearTimeout(entry.timer);
+      delete pendingUploads[key];
+      uploadKey(key, entry.value).catch(function (e) {
+        console.warn('Intra-Sync: Hochladen fehlgeschlagen für', key, e);
+      });
+    });
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') flushPendingUploads();
+  });
+  window.addEventListener('pagehide', flushPendingUploads);
 
   function scheduleDelete(key) {
     if (pendingUploads[key]) { clearTimeout(pendingUploads[key]); delete pendingUploads[key]; }
