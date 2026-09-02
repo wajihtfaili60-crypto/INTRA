@@ -948,7 +948,15 @@
     const entry = all[mastKey] && all[mastKey][taskId];
     if (!entry) return null;
     const answers = entry.answers || {};
-    const hasAny = Object.keys(answers).some((k) => {
+    // Bausteinweise (typ-bewusste) Prüfung über hasManualAnswerData/
+    // isBausteinAnswered weiter unten (per Hoisting hier schon nutzbar) -
+    // eine reine "ist überhaupt ein Wert da?"-Prüfung zählte eine unberührte
+    // Checkbox ("{optA:false}") oder eine leere Tabellenzeile fälschlich als
+    // beantwortet, wodurch eine Tätigkeit trotz leerem Protokoll als
+    // "Erledigt" galt bzw. das jeweils andere zugeordnete Protokoll (Oder-
+    // Auswahl) unnötig gesperrt wurde. Vorlage gelöscht: grobe Ersatzprüfung.
+    const protokoll = loadProtokollProjectList().find((p) => p.id === entry.protokollId);
+    const hasAny = protokoll ? hasManualAnswerData(protokoll, answers) : Object.keys(answers).some((k) => {
       const v = answers[k];
       return v !== '' && v != null && !(Array.isArray(v) && v.length === 0);
     });

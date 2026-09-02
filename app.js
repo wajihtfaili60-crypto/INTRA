@@ -10746,6 +10746,43 @@ function btRemoveNode(nodes, id) {
   function normalize(v) {
     return String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
   }
+  // Prüft für einen einzelnen Baustein, ob er (je nach Typ passend) als
+  // "beantwortet" gilt - exakte Kopie der gleichnamigen Funktion in
+  // handyapp.js (siehe dort für den Hintergrund). Wichtig für Checkbox- und
+  // Tabelle-Bausteine: eine unberührte Checkbox liefert immer ein Objekt wie
+  // "{optA:false, optB:false}" (nie null/''), eine unbefüllte Tabelle immer
+  // ein Array leerer Zellen - eine generische "ist überhaupt ein Wert da?"-
+  // Prüfung (wie renderDatensaetze() vorher direkt inline hatte) zählt beides
+  // fälschlich als "beantwortet", obwohl nichts angekreuzt/eingetragen wurde.
+  // Das führte dazu, dass ein leer gespeichertes Protokoll trotzdem als
+  // Datensatz auftauchte bzw. (in der Handy-App) eine Tätigkeit als
+  // "Erledigt" anzeigte/andere Protokolle sperrte, obwohl nichts ausgefüllt
+  // war - genau der gemeldete "Checken der Tätigkeiten funktioniert nicht
+  // ganz"-Bug.
+  function isBausteinAnswered(b, v) {
+    if (b.type === 'checkbox') {
+      if (!v || typeof v !== 'object') return false;
+      return Object.keys(v).some((k) => v[k] === true);
+    }
+    if (b.type === 'foto') {
+      const arr = Array.isArray(v) ? v : (v ? [v] : []);
+      return arr.length > 0;
+    }
+    if (b.type === 'unterschrift') return !!v;
+    if (b.type === 'tabelle') {
+      if (!Array.isArray(v) || !v.length) return false;
+      return v.some((row) => Array.isArray(row) && row.some((cell) => cell !== '' && cell != null));
+    }
+    if (Array.isArray(v)) return v.length > 0; // Mehrfachauswahl
+    return v !== '' && v != null;
+  }
+  function protokollHatEchteAntworten(protokoll, answers) {
+    if (!protokoll || !Array.isArray(protokoll.bausteine)) return false;
+    return protokoll.bausteine.some((b) => {
+      if (b.type === 'abschnitt') return false;
+      return isBausteinAnswered(b, (answers || {})[b.id]);
+    });
+  }
   // Uses the same normalized form as MT.rowsByKey's own keys (and thus what
   // the Handy-App looks the Mast up under too) - displayKey is only the
   // original, cosmetically-formatted text.
@@ -11041,7 +11078,12 @@ function btRemoveNode(nodes, id) {
       const protokollId = entry.protokollId;
       const protokoll = protokolle.find((p) => p.id === protokollId);
       const answers = entry.answers || {};
-      const hasAny = Object.keys(answers).some((k) => {
+      // Bausteinweise (typ-bewusste) Prüfung, wenn die Vorlage noch existiert
+      // - nur so werden leere Checkbox-/Tabelle-Bausteine korrekt als "nicht
+      // beantwortet" erkannt (siehe isBausteinAnswered oben). Vorlage
+      // gelöscht: grobe Ersatzprüfung, damit ein Datensatz mit Rohdaten nicht
+      // komplett verschwindet, nur weil sich nichts mehr typgenau prüfen lässt.
+      const hasAny = protokoll ? protokollHatEchteAntworten(protokoll, answers) : Object.keys(answers).some((k) => {
         const v = answers[k];
         return v !== '' && v != null && !(Array.isArray(v) && v.length === 0);
       });
