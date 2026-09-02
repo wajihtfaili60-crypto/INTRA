@@ -370,24 +370,9 @@
         <span class="nav-label">Projekteinstellungen</span>
       </li>
 
-      <li class="nav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span class="nav-label">Projektbeteiligte</span>
-      </li>
-
-      <li class="nav-item accent">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-        <span class="nav-label">Dokumente</span>
-      </li>
-
-      <li class="nav-item">
+      <li class="nav-item" data-nav-page="plaene" onclick="levelbuildGo('plaene')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
         <span class="nav-label">Pläne</span>
-      </li>
-
-      <li class="nav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        <span class="nav-label">Ereignisse</span>
       </li>
 
       <li class="nav-item" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
@@ -420,21 +405,6 @@
         <span class="nav-label">Einkauf</span>
       </li>
 
-      <li class="nav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><polyline points="9 12 11 14 15.5 9.5"/></svg>
-        <span class="nav-label">Abnahmen</span>
-      </li>
-
-      <li class="nav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="3" y1="21" x2="21" y2="21"/><path d="M4 21V10l8-6 8 6v11"/><line x1="9" y1="21" x2="9" y2="13"/><line x1="15" y1="21" x2="15" y2="13"/></svg>
-        <span class="nav-label">Bürgschaften (ausgehend)</span>
-      </li>
-
-      <li class="nav-item accent">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-        <span class="nav-label">Team-Kommunikation</span>
-      </li>
-
       <div class="nav-divider"></div>
 
       <li class="nav-item disabled">
@@ -452,10 +422,6 @@
 
     <div class="sidebar-footer">
       <ul class="nav-list">
-        <li class="nav-item">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
-          <span class="nav-label">Feed</span>
-        </li>
       </ul>
     </div>
   </div>
@@ -536,6 +502,49 @@
               </span>
             </div>
             <div class="comment-empty">Hinterlassen Sie einen Kommentar</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span>Verknüpfungen</span>
+            <span class="chev">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+            </span>
+          </div>
+          <div class="panel-body">
+            <div class="link-tiles">
+              <div class="link-tile" id="ov-dok-tile" style="cursor:pointer;">
+                <span class="link-tile-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </span>
+                <span class="link-tile-count" id="ov-dok-count">0 Dokumente</span>
+              </div>
+              <div class="link-tile" id="ov-plan-tile" style="cursor:pointer;">
+                <span class="link-tile-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+                </span>
+                <span class="link-tile-count" id="ov-plan-count">0 Pläne</span>
+              </div>
+              <div class="link-tile" id="ov-foto-tile" style="cursor:pointer;">
+                <span class="link-tile-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                </span>
+                <span class="link-tile-count" id="ov-foto-count">0 Fotos</span>
+              </div>
+              <div class="link-tile" id="ov-ereignis-tile" style="cursor:pointer;">
+                <span class="link-tile-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l8 6v6c0 5-3.4 8.7-8 8-4.6.7-8-3-8-8V8z"/></svg>
+                </span>
+                <span class="link-tile-count" id="ov-ereignis-count">0 Ereignisse</span>
+              </div>
+              <div class="link-tile" id="ov-bt-tile" style="cursor:pointer;">
+                <span class="link-tile-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                </span>
+                <span class="link-tile-count" id="ov-bt-count">0 Bautagebücher</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -697,24 +706,9 @@
         <span class="nav-label">Projekteinstellungen</span>
       </li>
 
-      <li class="nav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span class="nav-label">Projektbeteiligte</span>
-      </li>
-
-      <li class="nav-item accent">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-        <span class="nav-label">Dokumente</span>
-      </li>
-
-      <li class="nav-item">
+      <li class="nav-item" data-nav-page="plaene" onclick="levelbuildGo('plaene')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
         <span class="nav-label">Pläne</span>
-      </li>
-
-      <li class="nav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        <span class="nav-label">Ereignisse</span>
       </li>
 
       <li class="nav-item" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
@@ -747,21 +741,6 @@
         <span class="nav-label">Einkauf</span>
       </li>
 
-      <li class="nav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><polyline points="9 12 11 14 15.5 9.5"/></svg>
-        <span class="nav-label">Abnahmen</span>
-      </li>
-
-      <li class="nav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="3" y1="21" x2="21" y2="21"/><path d="M4 21V10l8-6 8 6v11"/><line x1="9" y1="21" x2="9" y2="13"/><line x1="15" y1="21" x2="15" y2="13"/></svg>
-        <span class="nav-label">Bürgschaften (ausgehend)</span>
-      </li>
-
-      <li class="nav-item accent">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-        <span class="nav-label">Team-Kommunikation</span>
-      </li>
-
       <div class="nav-divider"></div>
 
       <li class="nav-item disabled">
@@ -779,10 +758,6 @@
 
     <div class="sidebar-footer">
       <ul class="nav-list">
-        <li class="nav-item">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
-          <span class="nav-label">Feed</span>
-        </li>
       </ul>
     </div>
   </div>
@@ -1022,24 +997,9 @@
         <span class="nav-label">Projekteinstellungen</span>
       </li>
 
-      <li class="nav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span class="nav-label">Projektbeteiligte</span>
-      </li>
-
-      <li class="nav-item accent">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-        <span class="nav-label">Dokumente</span>
-      </li>
-
-      <li class="nav-item">
+      <li class="nav-item" data-nav-page="plaene" onclick="levelbuildGo('plaene')">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
         <span class="nav-label">Pläne</span>
-      </li>
-
-      <li class="nav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        <span class="nav-label">Ereignisse</span>
       </li>
 
       <li class="nav-item" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
@@ -1072,21 +1032,6 @@
         <span class="nav-label">Einkauf</span>
       </li>
 
-      <li class="nav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><polyline points="9 12 11 14 15.5 9.5"/></svg>
-        <span class="nav-label">Abnahmen</span>
-      </li>
-
-      <li class="nav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="3" y1="21" x2="21" y2="21"/><path d="M4 21V10l8-6 8 6v11"/><line x1="9" y1="21" x2="9" y2="13"/><line x1="15" y1="21" x2="15" y2="13"/></svg>
-        <span class="nav-label">Bürgschaften (ausgehend)</span>
-      </li>
-
-      <li class="nav-item accent">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-        <span class="nav-label">Team-Kommunikation</span>
-      </li>
-
       <div class="nav-divider"></div>
 
       <li class="nav-item disabled">
@@ -1104,10 +1049,6 @@
 
     <div class="sidebar-footer">
       <ul class="nav-list">
-        <li class="nav-item">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
-          <span class="nav-label">Feed</span>
-        </li>
       </ul>
     </div>
   </div>
@@ -1615,7 +1556,7 @@
   </a>
   <div class="breadcrumb">
     <span class="chev">&rsaquo;</span>
-    <a class="crumb-link" href="#uebersicht">Projekte</a>
+    <a class="crumb-link" href="#uebersicht" id="md-crumb-projekt">Projekt</a>
     <span class="chev">&rsaquo;</span>
     <span>&hellip;</span>
     <span class="chev">&rsaquo;</span>
@@ -1672,10 +1613,6 @@
 
     <div class="sidebar-footer">
       <ul class="nav-list">
-        <li class="nav-item">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
-          <span class="nav-label">Feed</span>
-        </li>
       </ul>
     </div>
   </div>
@@ -1827,23 +1764,23 @@
                 </span>
                 <span class="link-tile-count" id="md-dok-count">0 Dokumente</span>
               </div>
-              <div class="link-tile">
+              <div class="link-tile" id="md-ereignis-tile" style="cursor:pointer;">
                 <span class="link-tile-icon">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l8 6v6c0 5-3.4 8.7-8 8-4.6.7-8-3-8-8V8z"/></svg>
                 </span>
-                <span class="link-tile-count">0 Ereignisse</span>
+                <span class="link-tile-count" id="md-ereignis-count">0 Ereignisse</span>
               </div>
-              <div class="link-tile">
+              <div class="link-tile" id="md-foto-tile" style="cursor:pointer;">
                 <span class="link-tile-icon">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                 </span>
-                <span class="link-tile-count">0 Fotos</span>
+                <span class="link-tile-count" id="md-foto-count">0 Fotos</span>
               </div>
-              <div class="link-tile" onclick="levelbuildGo('bautagebuch-liste')" style="cursor:pointer;">
+              <div class="link-tile" id="md-bt-tile" style="cursor:pointer;">
                 <span class="link-tile-icon">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                 </span>
-                <span class="link-tile-count">Bautagebücher</span>
+                <span class="link-tile-count" id="md-bt-count">0 Bautagebücher</span>
               </div>
             </div>
           </div>
@@ -2069,11 +2006,11 @@
                 </span>
                 <span class="link-tile-count">0 Ereignisse</span>
               </div>
-              <div class="link-tile">
+              <div class="link-tile" id="ed-foto-tile" style="cursor:pointer;">
                 <span class="link-tile-icon">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                 </span>
-                <span class="link-tile-count">0 Fotos</span>
+                <span class="link-tile-count" id="ed-foto-count">0 Fotos</span>
               </div>
               <div class="link-tile" onclick="levelbuildGo('bautagebuch-liste')" style="cursor:pointer;">
                 <span class="link-tile-icon">
@@ -2118,7 +2055,7 @@
 </div>
 
 <div class="topbar-row2">
-  <a class="icon-btn" href="#uebersicht" title="Projekte">
+  <a class="icon-btn" href="#projekte" title="Projekte">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9"/></svg>
   </a>
   <div class="breadcrumb">
@@ -2195,10 +2132,6 @@
     </div>
     <div class="sidebar-footer">
       <ul class="nav-list">
-        <li class="nav-item">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
-          <span class="nav-label">Feed</span>
-        </li>
       </ul>
     </div>
   </div>
@@ -2245,7 +2178,7 @@
 </div>
 
 <div class="topbar-row2">
-  <a class="icon-btn" href="#uebersicht" title="Projekte">
+  <a class="icon-btn" href="#projekte" title="Projekte">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9"/></svg>
   </a>
   <div class="breadcrumb">
@@ -2312,10 +2245,6 @@
     </div>
     <div class="sidebar-footer">
       <ul class="nav-list">
-        <li class="nav-item">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
-          <span class="nav-label">Feed</span>
-        </li>
       </ul>
     </div>
   </div>
@@ -2330,37 +2259,38 @@
         <button class="link-action" id="dok-clear-filters">Filter zurücksetzen</button>
       </div>
       <div class="panel-body">
-        <div style="font-size:12px; color:var(--gray-500); margin-bottom:4px;">
-          Automatisch erzeugte, ausgefüllte PDF-Protokolle - entstehen im Bautagebuch über "PDF-Protokoll erstellen", sobald ein Datensatz zu einer Tätigkeit vorliegt und das zugehörige Protokoll eine PDF-Vorlage hinterlegt hat. Über die Zeile unter der Kopfzeile lässt sich nach Betreff, Mast, Datum, Ersteller und Datenerfasser filtern.
+        <div style="font-size:12px; color:var(--gray-500); margin-bottom:10px;">
+          Alle Dokumente dieses Projekts an einer Stelle - automatisch erzeugte Protokoll-PDFs aus dem Bautagebuch ("PDF-Protokoll erstellen") und Dokumente, die beim Masttafel-/Elemente-Import über eine Spalte „Datenpfad …" mit einem Standort bzw. Element verknüpft wurden (Pläne erscheinen stattdessen auf der eigenen Pläne-Seite).
         </div>
-        <div class="dok-table-wrap">
-          <table class="dok-table">
-            <thead>
-              <tr>
-                <th>Betreff</th>
-                <th>Mast</th>
-                <th>Datum</th>
-                <th>Ersteller</th>
-                <th>Datenerfasser</th>
-                <th>Protokoll</th>
-                <th>Erstellt am</th>
-                <th></th>
-              </tr>
-              <tr class="dok-filter-row">
-                <th><input type="text" data-dok-filter="betreff" placeholder="Filtern…"></th>
-                <th><input type="text" data-dok-filter="mastLabel" placeholder="Filtern…"></th>
-                <th><input type="date" data-dok-filter="datum"></th>
-                <th><input type="text" data-dok-filter="ersteller" placeholder="Filtern…"></th>
-                <th><input type="text" data-dok-filter="datenerfasser" placeholder="Filtern…"></th>
-                <th><input type="text" data-dok-filter="protokollName" placeholder="Filtern…"></th>
-                <th></th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="dok-tbody"></tbody>
-          </table>
+        <div class="fo-toolbar">
+          <div class="fo-toolbar-group">
+            <label for="dok-filter-standort">Standort/Element</label>
+            <select id="dok-filter-standort"><option value="">Alle Standorte</option></select>
+          </div>
+          <div class="fo-toolbar-group">
+            <label for="dok-filter-quelle">Quelle</label>
+            <select id="dok-filter-quelle">
+              <option value="">Alle Quellen</option>
+              <option value="protokoll">Protokoll-PDF</option>
+              <option value="datenpfad-mast">Datenpfad · Standort</option>
+              <option value="datenpfad-element">Datenpfad · Element</option>
+            </select>
+          </div>
+          <div class="fo-toolbar-group">
+            <label for="dok-sort">Sortieren</label>
+            <select id="dok-sort">
+              <option value="neu">Neueste zuerst</option>
+              <option value="alt">Älteste zuerst</option>
+              <option value="standort">Standort A-Z</option>
+            </select>
+          </div>
+          <div class="fo-toolbar-group fo-toolbar-search">
+            <label for="dok-search">Suche</label>
+            <input type="text" id="dok-search" placeholder="Standort, Dateiname, Typ…">
+          </div>
         </div>
-        <div class="changelog-empty" id="dok-empty" hidden>Noch keine Dokumente erstellt.</div>
+        <div class="fo-grid" id="dok-grid"></div>
+        <div class="changelog-empty" id="dok-empty" hidden>Noch keine Dokumente in diesem Projekt.</div>
       </div>
     </div>
   </div>
@@ -2400,7 +2330,7 @@
 </div>
 
 <div class="topbar-row2">
-  <a class="icon-btn" href="#uebersicht" title="Projekte">
+  <a class="icon-btn" href="#projekte" title="Projekte">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9"/></svg>
   </a>
   <div class="breadcrumb">
@@ -2477,10 +2407,6 @@
     </div>
     <div class="sidebar-footer">
       <ul class="nav-list">
-        <li class="nav-item">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
-          <span class="nav-label">Feed</span>
-        </li>
       </ul>
     </div>
   </div>
@@ -2534,6 +2460,167 @@
 </div><!-- /page-fotos -->
 
 <!-- ======================================================================
+     Pläne: aggregierte Kachel-Galerie über collectAllProjectDokumente()
+     (Filter isPlan) - dieselbe Struktur/dasselbe Bedienkonzept wie die
+     Fotos-Seite (siehe dort), nur für Datenpfad-Dokumente, deren Typ als
+     Plan erkannt wurde (isPlanDocType() in app.js). Nutzer-Wunsch: "Pläne
+     ... Logiken und Ansichten wie bei Fotos" + "werden immer mit Standorten
+     bzw. Element getaggt ... erscheinen dann auch in den Verknüpfungen zu
+     diesem Element."
+     ====================================================================== -->
+<div class="spa-page" id="page-plaene" data-title="Pläne · Intra">
+
+<div class="topbar-row1">
+  <div class="burger" data-collapse-sidebar><span></span><span></span><span></span></div>
+  <div class="logo">
+    <span class="mark"><span></span><span></span><span></span></span>
+    <span><span class="txt-level">In</span><span class="txt-build">tra</span></span>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="global-icons">
+    <button class="icon-btn" title="Benachrichtigungen">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="dot"></span>
+    </button>
+    <button class="icon-btn" title="Hilfe">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 1.7-2.4 3.7"/><line x1="12" y1="17" x2="12" y2="17.1"/></svg>
+    </button>
+    <div class="avatar" title="Wajih Tfaili">WT</div>
+  </div>
+</div>
+
+<div class="topbar-row2">
+  <a class="icon-btn" href="#projekte" title="Projekte">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9"/></svg>
+  </a>
+  <div class="breadcrumb">
+    <span class="chev">&rsaquo;</span>
+    <a class="crumb-link" href="#uebersicht" id="pl-crumb-projekt">67 - Nordbrand Brauerei Sanierung</a>
+    <span class="chev">&rsaquo;</span>
+    <span class="current">Pläne</span>
+  </div>
+  <div class="topbar-spacer"></div>
+</div>
+
+<div class="shell with-header2-nosubbar">
+  <div class="sidebar">
+    <div class="sidebar-title">
+      <span>Tab-Navigation</span>
+      <span class="collapse-btn" data-collapse-sidebar>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+      </span>
+    </div>
+    <div class="sidebar-scroll">
+    <ul class="nav-list">
+
+      <li class="nav-item" data-nav-page="uebersicht" onclick="levelbuildGo('uebersicht')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="nav-label">Übersicht</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="elemente" onclick="levelbuildGo('elemente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="nav-label">Elemente</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="leistungsverzeichnis" onclick="levelbuildGo('leistungsverzeichnis')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 2h6a2 2 0 0 1 2 2v18l-5-3-5 3V4a2 2 0 0 1 2-2z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
+        <span class="nav-label">Leistungsverzeichnis</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="fertigstellungsliste" onclick="levelbuildGo('fertigstellungsliste')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="17" y2="12"/><polyline points="7 16 9 18 12.5 14.5"/></svg>
+        <span class="nav-label">Fertigstellungsliste</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="bautagebuch-liste" onclick="levelbuildGo('bautagebuch-liste')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span class="nav-label">Bautagebücher</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="dokumente" onclick="levelbuildGo('dokumente')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+        <span class="nav-label">Dokumente</span>
+      </li>
+
+      <li class="nav-item active" data-nav-page="plaene" onclick="levelbuildGo('plaene')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+        <span class="nav-label">Pläne</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="fotos" onclick="levelbuildGo('fotos')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span class="nav-label">Fotos</span>
+      </li>
+
+      <li class="nav-item" data-nav-page="einkauf" onclick="levelbuildGo('einkauf')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span class="nav-label">Einkauf</span>
+      </li>
+
+      <li class="nav-item disabled">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 12 11 14 15 9.5"/></svg>
+        <span class="nav-label">Aufgaben</span>
+      </li>
+
+      <li class="nav-item disabled">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span class="nav-label">Weitere Ansichten</span>
+      </li>
+
+    </ul>
+    </div>
+    <div class="sidebar-footer">
+      <ul class="nav-list">
+      </ul>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-header-left">
+          <span>Pläne</span>
+          <span class="badge-mini" id="pl-count">0</span>
+        </span>
+        <button class="link-action" id="pl-clear-filters">Filter zurücksetzen</button>
+      </div>
+      <div class="panel-body">
+        <div style="font-size:12px; color:var(--gray-500); margin-bottom:10px;">
+          Alle Pläne dieses Projekts an einer Stelle - erkannt aus Dokumenten, die beim Masttafel-/Elemente-Import über eine Spalte „Datenpfad Lageplan/Übersichtsplan/…" verknüpft wurden. Erscheinen automatisch auch in den Verknüpfungen des jeweiligen Standorts bzw. Elements.
+        </div>
+        <div class="fo-toolbar">
+          <div class="fo-toolbar-group">
+            <label for="pl-filter-standort">Standort/Element</label>
+            <select id="pl-filter-standort"><option value="">Alle Standorte</option></select>
+          </div>
+          <div class="fo-toolbar-group">
+            <label for="pl-filter-typ">Plantyp</label>
+            <select id="pl-filter-typ"><option value="">Alle Typen</option></select>
+          </div>
+          <div class="fo-toolbar-group">
+            <label for="pl-sort">Sortieren</label>
+            <select id="pl-sort">
+              <option value="neu">Neueste zuerst</option>
+              <option value="alt">Älteste zuerst</option>
+              <option value="standort">Standort A-Z</option>
+            </select>
+          </div>
+          <div class="fo-toolbar-group fo-toolbar-search">
+            <label for="pl-search">Suche</label>
+            <input type="text" id="pl-search" placeholder="Standort, Dateiname, Typ…">
+          </div>
+        </div>
+        <div class="fo-grid" id="pl-grid"></div>
+        <div class="changelog-empty" id="pl-empty" hidden>Noch keine Pläne in diesem Projekt - Pläne entstehen automatisch, sobald beim Masttafel-/Elemente-Import eine Spalte „Datenpfad Lageplan" (o. ä.) mit einem Plan-Dokument verknüpft wurde.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /page-plaene -->
+
+<!-- ======================================================================
      Elemente: Nutzer-Wunsch: "der ereich für den Masttafel Infport soll in
      einem Übergeordneten Bereich namens Elemente geschoben werden. Die
      Masttafel selber ist eine Elementensammlung ... Elementensammlung
@@ -2566,7 +2653,7 @@
 </div>
 
 <div class="topbar-row2">
-  <a class="icon-btn" href="#uebersicht" title="Projekte">
+  <a class="icon-btn" href="#projekte" title="Projekte">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9"/></svg>
   </a>
   <div class="breadcrumb">
@@ -2643,10 +2730,6 @@
     </div>
     <div class="sidebar-footer">
       <ul class="nav-list">
-        <li class="nav-item">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
-          <span class="nav-label">Feed</span>
-        </li>
       </ul>
     </div>
   </div>
@@ -2844,7 +2927,7 @@
 </div>
 
 <div class="topbar-row2">
-  <a class="icon-btn" href="#uebersicht" title="Projekte">
+  <a class="icon-btn" href="#projekte" title="Projekte">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9"/></svg>
   </a>
   <div class="breadcrumb">
@@ -2916,10 +2999,6 @@
     </div>
     <div class="sidebar-footer">
       <ul class="nav-list">
-        <li class="nav-item">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
-          <span class="nav-label">Feed</span>
-        </li>
       </ul>
     </div>
   </div>
@@ -3039,7 +3118,7 @@
 </div>
 
 <div class="topbar-row2">
-  <a class="icon-btn" href="#uebersicht" title="Projekte">
+  <a class="icon-btn" href="#projekte" title="Projekte">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9"/></svg>
   </a>
   <div class="breadcrumb">
@@ -3381,7 +3460,7 @@
 </div>
 
 <div class="topbar-row2">
-  <a class="icon-btn" href="#uebersicht" title="Projekte">
+  <a class="icon-btn" href="#projekte" title="Projekte">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9"/></svg>
   </a>
   <div class="breadcrumb">
@@ -3457,10 +3536,6 @@
     </div>
     <div class="sidebar-footer">
       <ul class="nav-list">
-        <li class="nav-item">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
-          <span class="nav-label">Feed</span>
-        </li>
       </ul>
     </div>
   </div>
@@ -3535,7 +3610,7 @@
 </div>
 
 <div class="topbar-row2">
-  <a class="icon-btn" href="#uebersicht" title="Projekte">
+  <a class="icon-btn" href="#projekte" title="Projekte">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9"/></svg>
   </a>
   <div class="breadcrumb">
@@ -3611,10 +3686,6 @@
     </div>
     <div class="sidebar-footer">
       <ul class="nav-list">
-        <li class="nav-item">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 12h8"/><path d="M8 16h5"/><path d="M8 8h3"/></svg>
-          <span class="nav-label">Feed</span>
-        </li>
       </ul>
     </div>
   </div>
@@ -3671,7 +3742,7 @@
 <script src="app.js?v=4"></script>
 <script>
 (function () {
-  var PAGES = ['projekte', 'uebersicht', 'elemente', 'formular', 'projekteinstellungen', 'mast-detail', 'element-detail', 'taetigkeitsliste', 'protokoll', 'bautagebuch-liste', 'bautagebuch-detail', 'leistungsverzeichnis', 'fertigstellungsliste', 'dokumente', 'fotos', 'einkauf'];
+  var PAGES = ['projekte', 'uebersicht', 'elemente', 'formular', 'projekteinstellungen', 'mast-detail', 'element-detail', 'taetigkeitsliste', 'protokoll', 'bautagebuch-liste', 'bautagebuch-detail', 'leistungsverzeichnis', 'fertigstellungsliste', 'dokumente', 'plaene', 'fotos', 'einkauf'];
 
   function showPage(name) {
     if (PAGES.indexOf(name) === -1) name = 'projekte';
@@ -3707,6 +3778,7 @@
     if (name === 'leistungsverzeichnis' && window.levelbuildOnShowLeistungsverzeichnis) window.levelbuildOnShowLeistungsverzeichnis();
     if (name === 'fertigstellungsliste' && window.levelbuildOnShowFertigstellungsliste) window.levelbuildOnShowFertigstellungsliste();
     if (name === 'dokumente' && window.levelbuildOnShowDokumente) window.levelbuildOnShowDokumente();
+    if (name === 'plaene' && window.levelbuildOnShowPlaene) window.levelbuildOnShowPlaene();
     if (name === 'fotos' && window.levelbuildOnShowFotos) window.levelbuildOnShowFotos();
     if (name === 'elemente' && window.levelbuildOnShowElemente) window.levelbuildOnShowElemente();
     if (name === 'einkauf' && window.levelbuildOnShowEinkauf) window.levelbuildOnShowEinkauf();

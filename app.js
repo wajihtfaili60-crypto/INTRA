@@ -3666,6 +3666,120 @@ function collectAllProjectFotos() {
   return result;
 }
 
+// ======================================================================
+// Dokumente/Pläne-Sammelseiten: führt, analog zu collectAllProjectFotos()
+// oben, alle im Projekt tatsächlich vorhandenen Dokumente unabhängig von
+// ihrer Quelle zu EINER Liste zusammen. Nutzer-Wunsch: "es können und werden
+// ja schon Dokumente hochgeladen und auch Pläne an anderer Stelle im System
+// [...] die Informationen [sollen] dann auch wirklich hier im richtigen
+// Bereich landen." Drei Quellen tragen echte Dokumente im aktuellen
+// Datenmodell: (1) automatisch erzeugte Protokoll-PDFs (loadDokumente -
+// entstehen im Bautagebuch), (2) per "Datenpfad <Name>"-Spalte beim
+// Masttafel-Import verknüpfte Dokumente (loadMastDatenpfadDokumente) und (3)
+// dieselbe Datenpfad-Verknüpfung bei generischen Elementensammlungen
+// (loadElementDatenpfadDokumente). Rein lesend - Dokumente selbst entstehen
+// weiterhin nur an ihrer jeweiligen Quelle (Bautagebuch bzw. Datenpfad-Import).
+// isPlanDocType() trennt die beiden Sammelseiten (Pläne vs. übrige
+// Dokumente): eine Datenpfad-Spalte "Datenpfad Lageplan"/"Datenpfad
+// Übersichtsplan" o.ä. wird als Plan eingeordnet, alles andere (inkl. aller
+// Protokoll-PDFs, die nie Pläne sind) als normales Dokument.
+// ======================================================================
+function isPlanDocType(typ) {
+  return /plan|zeichnung|grundriss|schema/i.test(String(typ || ''));
+}
+function collectAllProjectDokumente() {
+  const result = [];
+  const mastLabels = {};
+  (typeof getMastColumnValuesForRules === 'function' ? getMastColumnValuesForRules() : []).forEach((m) => {
+    mastLabels[m.key] = m.displayKey || m.key;
+  });
+  function mastLabelFor(mastKey) { return mastLabels[mastKey] || mastKey; }
+
+  // ---- Quelle 1: automatisch erzeugte Protokoll-PDFs ----
+  const protokollDocs = (typeof loadDokumente === 'function') ? loadDokumente() : [];
+  protokollDocs.forEach((d) => {
+    if (!d || !d.pdfBase64) return;
+    result.push({
+      id: 'pd-' + d.id,
+      name: d.betreff || d.protokollName || 'Protokoll-PDF',
+      typ: d.protokollName || 'Protokoll-PDF',
+      url: d.pdfBase64,
+      mime: 'application/pdf',
+      standortKey: d.mastKey || null,
+      standortLabel: d.mastLabel || (d.mastKey ? mastLabelFor(d.mastKey) : null),
+      addedAt: d.createdAt || d.datum || null,
+      quelle: 'protokoll',
+      quelleLabel: 'Protokoll-PDF',
+      isPlan: false,
+      sourceId: d.id,
+    });
+  });
+
+  // ---- Quelle 2: Datenpfad-Dokumente je Mast (Masttafel-Import) ----
+  const mastDocs = (typeof loadMastDatenpfadDokumente === 'function') ? loadMastDatenpfadDokumente() : {};
+  Object.keys(mastDocs).forEach((mastKey) => {
+    (mastDocs[mastKey] || []).forEach((doc) => {
+      if (!doc || !doc.url) return;
+      result.push({
+        id: 'dpm-' + doc.id,
+        name: doc.name || 'Dokument',
+        typ: doc.typ || 'Dokument',
+        url: doc.url,
+        mime: doc.mime || 'application/octet-stream',
+        size: doc.size || 0,
+        standortKey: mastKey,
+        standortLabel: mastLabelFor(mastKey),
+        addedAt: doc.attachedAt || null,
+        quelle: 'datenpfad-mast',
+        quelleLabel: 'Datenpfad · Standort',
+        isPlan: isPlanDocType(doc.typ),
+        sourceFile: doc.sourceFile || null,
+      });
+    });
+  });
+
+  // ---- Quelle 3: Datenpfad-Dokumente je generisches Element ----
+  const elementDocs = (typeof loadElementDatenpfadDokumente === 'function') ? loadElementDatenpfadDokumente() : {};
+  const sammlungen = (typeof loadElementensammlungen === 'function') ? loadElementensammlungen() : [];
+  const elementDaten = (typeof loadElementDaten === 'function') ? loadElementDaten() : {};
+  function elementRowLabel(sammlungId, bauabschnittId, rowKey) {
+    const entry = elementDaten[sammlungId];
+    const section = entry && entry.sections ? entry.sections[bauabschnittId] : null;
+    if (!section || !section.rowsByKey) return rowKey;
+    const pair = section.rowsByKey.find((p) => p[0] === rowKey);
+    return pair && pair[1] ? (pair[1].displayKey || rowKey) : rowKey;
+  }
+  Object.keys(elementDocs).forEach((sammlungId) => {
+    const sammlung = sammlungen.find((s) => s.id === sammlungId);
+    const byBauabschnitt = elementDocs[sammlungId] || {};
+    Object.keys(byBauabschnitt).forEach((bauabschnittId) => {
+      const byRow = byBauabschnitt[bauabschnittId] || {};
+      Object.keys(byRow).forEach((rowKey) => {
+        (byRow[rowKey] || []).forEach((doc) => {
+          if (!doc || !doc.url) return;
+          result.push({
+            id: 'dpe-' + doc.id,
+            name: doc.name || 'Dokument',
+            typ: doc.typ || 'Dokument',
+            url: doc.url,
+            mime: doc.mime || 'application/octet-stream',
+            size: doc.size || 0,
+            standortKey: sammlungId + ':' + rowKey,
+            standortLabel: elementRowLabel(sammlungId, bauabschnittId, rowKey) + (sammlung ? ' (' + sammlung.name + ')' : ''),
+            addedAt: doc.attachedAt || null,
+            quelle: 'datenpfad-element',
+            quelleLabel: 'Datenpfad · Element',
+            isPlan: isPlanDocType(doc.typ),
+            sourceFile: doc.sourceFile || null,
+          });
+        });
+      });
+    });
+  });
+
+  return result;
+}
+
 function normalizeRegelWert(v) {
   return String(v == null ? '' : v).trim().toLowerCase();
 }
@@ -10276,6 +10390,8 @@ function btRemoveNode(nodes, id) {
 
     const crumbKey = document.getElementById('md-crumb-key');
     if (crumbKey) crumbKey.textContent = `${raw.key} - ${selected}`;
+    const crumbProjekt = document.getElementById('md-crumb-projekt');
+    if (crumbProjekt) crumbProjekt.textContent = raw.projectLabel || currentProjectLabel();
     document.title = `${raw.key} - ${selected} · Intra`;
 
     const indexHero = rowIndex
@@ -11029,6 +11145,94 @@ function btRemoveNode(nodes, id) {
 })();
 
 // ======================================================================
+// Mast-Detail: Verknüpfungen-Kacheln "Fotos"/"Ereignisse"/"Bautagebücher" -
+// Nutzer-Wunsch: "andere Dokumenten Fotos Ereignis und Bautagesbericht
+// Kacheln gefüllt werden, so wie es logisch ist". Fotos zählt/verlinkt wie
+// die Dokumente-Kachel oben (nur Ziel Fotos-Seite statt Dokumente-Seite,
+// per sessionStorage-Deep-Link genau wie "Alle Dokumente dieses Masts"),
+// Ereignisse/Bautagebücher sind rein lesende Zähl-Kacheln (keine eigene
+// Standort-gefilterte Ansicht in Bautagebuch-Liste vorhanden), verlinken
+// aber trotzdem zur Bautagebuch-Liste für den nächsten Schritt. Eigenständige
+// IIFE, chaint sich zusätzlich in window.levelbuildMastDetailRender ein.
+// Only runs on mast-detail.html (guarded by #md-foto-tile).
+// ======================================================================
+(function () {
+  const fotoTile = document.getElementById('md-foto-tile');
+  if (!fotoTile) return;
+
+  function currentMastKeyNorm() {
+    let raw;
+    try { raw = JSON.parse(sessionStorage.getItem('levelbuild_mast_detail') || 'null'); } catch (e) { raw = null; }
+    return raw ? raw.mastKey : null;
+  }
+  function currentMastLabelDisplay() {
+    let raw;
+    try { raw = JSON.parse(sessionStorage.getItem('levelbuild_mast_detail') || 'null'); } catch (e) { raw = null; }
+    return raw ? raw.key : null;
+  }
+
+  fotoTile.addEventListener('click', () => {
+    // Fotos-Seite filtert nach mastKey (normalisiert), im Unterschied zur
+    // Dokumente-Seite (die zusätzlich per Label matcht) - deshalb hier
+    // bewusst den normalisierten Schlüssel übergeben, nicht das Display-Label.
+    const keyNorm = currentMastKeyNorm();
+    if (keyNorm) { try { sessionStorage.setItem('levelbuild_foto_prefill_mast', keyNorm); } catch (e) { /* ignore */ } }
+    if (window.levelbuildGo) window.levelbuildGo('fotos');
+  });
+
+  const ereignisTile = document.getElementById('md-ereignis-tile');
+  if (ereignisTile) {
+    ereignisTile.addEventListener('click', () => { if (window.levelbuildGo) window.levelbuildGo('bautagebuch-liste'); });
+  }
+  const btTile = document.getElementById('md-bt-tile');
+  if (btTile) {
+    btTile.addEventListener('click', () => { if (window.levelbuildGo) window.levelbuildGo('bautagebuch-liste'); });
+  }
+
+  function renderCounts() {
+    const keyNorm = currentMastKeyNorm();
+    const labelDisplay = currentMastLabelDisplay();
+
+    const fotoCountEl = document.getElementById('md-foto-count');
+    if (fotoCountEl) {
+      const all = (typeof collectAllProjectFotos === 'function') ? collectAllProjectFotos() : [];
+      const n = keyNorm ? all.filter((f) => f.mastKey === keyNorm).length : 0;
+      fotoCountEl.textContent = `${n} Foto${n === 1 ? '' : 's'}`;
+    }
+
+    const bautagebuecher = (typeof loadBautagebuecher === 'function') ? loadBautagebuecher() : [];
+    const ereignisCountEl = document.getElementById('md-ereignis-count');
+    if (ereignisCountEl) {
+      let n = 0;
+      if (keyNorm) {
+        bautagebuecher.forEach((r) => { (r.ereignisse || []).forEach((e) => { if (e.mastKey === keyNorm) n++; }); });
+      }
+      ereignisCountEl.textContent = `${n} Ereignis${n === 1 ? '' : 'se'}`;
+    }
+
+    const btCountEl = document.getElementById('md-bt-count');
+    if (btCountEl) {
+      let n = 0;
+      if (keyNorm || labelDisplay) {
+        bautagebuecher.forEach((r) => {
+          const viaEreignis = (r.ereignisse || []).some((e) => e.mastKey === keyNorm);
+          const viaLeistung = (r.leistungen || []).some((l) => (l.standorte || []).includes(labelDisplay));
+          if (viaEreignis || viaLeistung) n++;
+        });
+      }
+      btCountEl.textContent = `${n} ${n === 1 ? 'Bautagebuch' : 'Bautagebücher'}`;
+    }
+  }
+
+  const prevRenderTiles = window.levelbuildMastDetailRender;
+  window.levelbuildMastDetailRender = function () {
+    if (prevRenderTiles) prevRenderTiles();
+    renderCounts();
+  };
+  renderCounts();
+})();
+
+// ======================================================================
 // Element-Detail (generische Elementensammlungen, Nutzer-Wunsch Folgeturn
 // 9: "jedes Element ... genau wie wenn ich auf einen Mast klicke dann auch
 // die selbe maske"): liest den von openElementDetailPage() (siehe
@@ -11597,6 +11801,42 @@ function btRemoveNode(nodes, id) {
   const prevRenderDok = window.levelbuildElementDetailRender;
   window.levelbuildElementDetailRender = function () {
     if (prevRenderDok) prevRenderDok();
+    renderCount();
+  };
+  renderCount();
+})();
+
+// ======================================================================
+// Element-Detail: Verknüpfungen-Kachel "Fotos" - zählt/verlinkt die
+// Standort-Fotos dieses Elements (ELEMENT_FOTOS_KEY, siehe weiter oben in
+// app.js), spiegelt die Mast-Detail-Fotos-Kachel. Ereignisse/Bautagebücher
+// bleiben für generische Elemente bewusst außen vor - beide Speicher
+// (Bautagebuch-Leistungen.standorte, Ereignis.mastKey) sind aktuell fest auf
+// echte Masttafel-Standorte bezogen, nicht auf generische Elemente erweitert.
+// Only runs on element-detail.html (guarded by #ed-foto-tile).
+// ======================================================================
+(function () {
+  const tile = document.getElementById('ed-foto-tile');
+  if (!tile) return;
+
+  function currentRaw() {
+    try { return JSON.parse(sessionStorage.getItem('levelbuild_element_detail') || 'null'); } catch (e) { return null; }
+  }
+
+  tile.addEventListener('click', () => { if (window.levelbuildGo) window.levelbuildGo('fotos'); });
+
+  function renderCount() {
+    const countEl = document.getElementById('ed-foto-count');
+    if (!countEl) return;
+    const raw = currentRaw();
+    const map = (typeof loadElementFotos === 'function') ? loadElementFotos() : {};
+    const n = raw && map[raw.sammlungId] && map[raw.sammlungId][raw.rowKey] ? map[raw.sammlungId][raw.rowKey].length : 0;
+    countEl.textContent = `${n} Foto${n === 1 ? '' : 's'}`;
+  }
+
+  const prevRenderFoto = window.levelbuildElementDetailRender;
+  window.levelbuildElementDetailRender = function () {
+    if (prevRenderFoto) prevRenderFoto();
     renderCount();
   };
   renderCount();
@@ -13227,74 +13467,133 @@ function btRemoveNode(nodes, id) {
 })();
 
 // ======================================================================
-// Dokumente: Liste der automatisch aus Protokoll-Datensätzen erzeugten,
-// ausgefüllten PDFs (siehe generateProtokollPdf + "PDF-Protokoll erstellen"
-// im Bautagebuch, weiter oben). Diese Seite ist rein lesend/verwaltend -
-// filtert (Betreff/Mast/Datum/Ersteller/Datenerfasser/Protokoll), öffnet
-// zum Herunterladen und löscht - erzeugt wird hier nichts.
+// Dokumente-Sammelseite: aggregierte Kachel-Galerie über
+// collectAllProjectDokumente() (Filter !isPlan - Pläne haben ihre eigene,
+// parallele Seite unten), nach demselben Muster wie die Fotos-Seite (Filter
+// Standort/Quelle, Sortierung, Suche, Lightbox/Vorschau über das gemeinsame
+// #modal-overlay). Rein lesend für Datenpfad-Dokumente (entstehen nur beim
+// Import); Protokoll-PDFs bleiben zusätzlich löschbar (wie bisher), da sie
+// eigenständig erzeugte App-Daten sind, keine importierten Verweise.
 // ======================================================================
 (function () {
-  const tbodyEl = document.getElementById('dok-tbody');
-  if (!tbodyEl) return;
+  const gridEl = document.getElementById('dok-grid');
+  if (!gridEl) return;
 
   function esc(v) {
     const d = document.createElement('div');
     d.textContent = v == null ? '' : String(v);
     return d.innerHTML;
   }
-  function fmtDatum(iso) {
+  function fmtDatumZeitDok(iso) {
     if (!iso) return '–';
-    const parts = String(iso).split('-');
-    return parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : iso;
-  }
-  function fmtDatumZeit(iso) {
-    if (!iso) return '–';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+      return `${m[3]}.${m[2]}.${m[1]}`;
+    }
     try {
       const d = new Date(iso);
-      if (isNaN(d.getTime())) return iso;
+      if (isNaN(d.getTime())) return String(iso);
       const pad = (n) => String(n).padStart(2, '0');
-      return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    } catch (e) { return iso; }
+      return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch (e) { return String(iso); }
+  }
+  function fmtBytesDok(n) {
+    n = Number(n) || 0;
+    if (!n) return '';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
-  // Session-Zustand (nicht persistiert) - eine Textzeile pro filterbarer
-  // Spalte; "datum" wird exakt verglichen (Datumsauswahl), alle anderen als
-  // case-insensitive Teilstring.
-  let filters = { betreff: '', mastLabel: '', datum: '', ersteller: '', datenerfasser: '', protokollName: '' };
-
-  function matchesFilters(doc) {
-    return Object.keys(filters).every((key) => {
-      const f = (filters[key] || '').trim();
-      if (!f) return true;
-      if (key === 'datum') return doc.datum === f;
-      return String(doc[key] || '').toLowerCase().includes(f.toLowerCase());
-    });
+  const modalOverlayDok = document.getElementById('modal-overlay');
+  const modalTitleDok = document.getElementById('modal-title');
+  const modalBodyDok = document.getElementById('modal-body');
+  const modalFooterDok = document.getElementById('modal-footer');
+  function openModalDok(title, bodyHtml, footerHtml) {
+    if (!modalOverlayDok) return;
+    modalTitleDok.textContent = title;
+    modalBodyDok.innerHTML = bodyHtml;
+    modalFooterDok.innerHTML = footerHtml || '';
+    modalOverlayDok.hidden = false;
   }
+  function closeModalDok() { if (modalOverlayDok) modalOverlayDok.hidden = true; }
 
-  function downloadDokument(doc) {
+  let filterStandort = '';
+  let filterQuelle = '';
+  let sortMode = 'neu';
+  let searchQuery = '';
+
+  function downloadDoc(d) {
     try {
       const a = document.createElement('a');
-      a.href = doc.pdfBase64;
-      a.download = (doc.betreff || 'Protokoll').replace(/[\\/:*?"<>|]+/g, '_') + '.pdf';
+      a.href = d.url;
+      a.download = (d.name || 'Dokument').replace(/[\\/:*?"<>|]+/g, '_');
       document.body.appendChild(a);
       a.click();
       a.remove();
     } catch (e) { /* z. B. in Testumgebungen ohne echte Download-Navigation - unkritisch */ }
   }
 
+  function deleteDocIfPossible(d) {
+    if (d.quelle !== 'protokoll' || !d.sourceId) return false;
+    if (!window.confirm('Dieses Dokument wirklich löschen?')) return true;
+    saveDokumente(loadDokumente().filter((x) => x.id !== d.sourceId));
+    return true;
+  }
+
+  function openPreview(d) {
+    const isImg = /^image\//.test(d.mime || '');
+    const isPdf = /pdf/i.test(d.mime || '') || /\.pdf$/i.test(d.name || '');
+    const preview = isImg
+      ? `<img src="${d.url}" alt="${esc(d.name)}" style="max-width:100%; border-radius:8px;">`
+      : isPdf
+        ? `<iframe src="${d.url}" style="width:100%; height:60vh; border:1px solid var(--gray-200); border-radius:8px;"></iframe>`
+        : `<div class="changelog-empty">Keine Vorschau verfügbar - bitte herunterladen.</div>`;
+    const html = `
+      <div class="fo-lightbox">
+        ${preview}
+        <div class="fo-lightbox-info">
+          <div class="fzl-evt-row"><div class="fzl-evt-label">Standort/Element</div><div class="fzl-evt-value">${esc(d.standortLabel || '–')}</div></div>
+          <div class="fzl-evt-row"><div class="fzl-evt-label">Typ</div><div class="fzl-evt-value">${esc(d.typ || '–')}</div></div>
+          <div class="fzl-evt-row"><div class="fzl-evt-label">Quelle</div><div class="fzl-evt-value">${esc(d.quelleLabel || '–')}</div></div>
+          <div class="fzl-evt-row"><div class="fzl-evt-label">Datum</div><div class="fzl-evt-value">${esc(fmtDatumZeitDok(d.addedAt))}</div></div>
+          ${d.size ? `<div class="fzl-evt-row"><div class="fzl-evt-label">Größe</div><div class="fzl-evt-value">${esc(fmtBytesDok(d.size))}</div></div>` : ''}
+          ${d.sourceFile ? `<div class="fzl-evt-row"><div class="fzl-evt-label">Quelldatei</div><div class="fzl-evt-value">${esc(d.sourceFile)}</div></div>` : ''}
+        </div>
+      </div>`;
+    const canDelete = d.quelle === 'protokoll';
+    openModalDok(d.name || 'Dokument', html,
+      '<button type="button" class="matt-tool-btn" id="dok-lb-download">Herunterladen</button>' +
+      (canDelete ? '<button type="button" class="matt-tool-btn matt-tool-btn-danger" id="dok-lb-delete">Löschen</button>' : '') +
+      '<button type="button" class="matt-tool-btn" id="dok-lb-close">Schließen</button>');
+    const dl = document.getElementById('dok-lb-download');
+    if (dl) dl.addEventListener('click', () => downloadDoc(d));
+    const del = document.getElementById('dok-lb-delete');
+    if (del) del.addEventListener('click', () => { if (deleteDocIfPossible(d)) { closeModalDok(); render(); } });
+    const cl = document.getElementById('dok-lb-close');
+    if (cl) cl.addEventListener('click', closeModalDok);
+  }
+
+  function populateStandortFilterDok(items) {
+    const sel = document.getElementById('dok-filter-standort');
+    if (!sel) return;
+    const distinct = new Map();
+    items.forEach((d) => { if (d.standortKey && !distinct.has(d.standortKey)) distinct.set(d.standortKey, d.standortLabel); });
+    const sorted = Array.from(distinct.entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'de', { numeric: true }));
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Alle Standorte</option>' + sorted.map(([key, label]) => `<option value="${esc(key)}">${esc(label)}</option>`).join('');
+    if (sorted.some(([key]) => key === current)) sel.value = current;
+  }
+
   // Einmaliger Deep-Link von der Mastmaske ("Alle Dokumente dieses Masts")
-  // in Form eines sessionStorage-Werts - wird hier gelesen, als Mast-Filter
-  // übernommen und sofort wieder gelöscht (kein dauerhafter Zustand, sonst
-  // würde ein späterer normaler Besuch der Dokumente-Seite ungewollt weiter
-  // gefiltert bleiben).
+  // in Form eines sessionStorage-Werts - wird hier gelesen, als
+  // Standort-Filter übernommen und sofort wieder gelöscht.
   function applyMastPrefillIfAny() {
     let prefill;
     try { prefill = sessionStorage.getItem('levelbuild_dok_prefill_mast'); } catch (e) { prefill = null; }
     if (!prefill) return;
     try { sessionStorage.removeItem('levelbuild_dok_prefill_mast'); } catch (e) { /* ignore */ }
-    filters.mastLabel = prefill;
-    const input = document.querySelector('[data-dok-filter="mastLabel"]');
-    if (input) input.value = prefill;
+    filterStandort = prefill;
   }
 
   function render() {
@@ -13302,70 +13601,339 @@ function btRemoveNode(nodes, id) {
     if (crumbEl) crumbEl.textContent = currentProjectLabel();
     applyMastPrefillIfAny();
 
-    const all = loadDokumente().slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-    const items = all.filter(matchesFilters);
+    const all = (typeof collectAllProjectDokumente === 'function') ? collectAllProjectDokumente().filter((d) => !d.isPlan) : [];
+    populateStandortFilterDok(all);
+
+    // Standort-Filter kann entweder ein exakter Schlüssel sein (aus dem
+    // Dropdown) oder - beim Deep-Link von der Mastmaske - das Label
+    // (mastLabel), das dort per sessionStorage übergeben wird.
+    let items = all.filter((d) => {
+      if (filterStandort && d.standortKey !== filterStandort && d.standortLabel !== filterStandort) return false;
+      if (filterQuelle && d.quelle !== filterQuelle) return false;
+      if (searchQuery) {
+        const hay = [d.standortLabel, d.name, d.typ].filter(Boolean).join(' ').toLowerCase();
+        if (!hay.includes(searchQuery)) return false;
+      }
+      return true;
+    });
+
+    items.sort((a, b) => {
+      if (sortMode === 'standort') return String(a.standortLabel || '').localeCompare(String(b.standortLabel || ''), 'de', { numeric: true });
+      const da = String(a.addedAt || '');
+      const db = String(b.addedAt || '');
+      return sortMode === 'alt' ? da.localeCompare(db) : db.localeCompare(da);
+    });
+
     const countEl = document.getElementById('dok-count');
     if (countEl) countEl.textContent = String(items.length);
     const emptyEl = document.getElementById('dok-empty');
-    const wrapEl = document.querySelector('#page-dokumente .dok-table-wrap');
+
     if (!all.length) {
-      if (emptyEl) emptyEl.hidden = false;
-      if (wrapEl) wrapEl.hidden = true;
-      tbodyEl.innerHTML = '';
+      if (emptyEl) { emptyEl.hidden = false; emptyEl.textContent = 'Noch keine Dokumente in diesem Projekt.'; }
+      gridEl.innerHTML = '';
+      return;
+    }
+    if (!items.length) {
+      if (emptyEl) { emptyEl.hidden = false; emptyEl.textContent = 'Keine Dokumente entsprechen der aktuellen Filterung/Suche.'; }
+      gridEl.innerHTML = '';
       return;
     }
     if (emptyEl) emptyEl.hidden = true;
-    if (wrapEl) wrapEl.hidden = false;
-    if (!items.length) {
-      tbodyEl.innerHTML = '<tr><td colspan="8" class="changelog-empty" style="padding:14px 0;">Keine Dokumente entsprechen den aktuellen Filtern.</td></tr>';
-      return;
-    }
-    tbodyEl.innerHTML = items.map((doc) => `
-      <tr data-dok-id="${esc(doc.id)}">
-        <td>${esc(doc.betreff || '–')}</td>
-        <td>${esc(doc.mastLabel || doc.mastKey || '–')}</td>
-        <td>${esc(fmtDatum(doc.datum))}</td>
-        <td>${esc(doc.ersteller || '–')}</td>
-        <td>${esc(doc.datenerfasser || '–')}</td>
-        <td>${esc(doc.protokollName || '–')}</td>
-        <td>${esc(fmtDatumZeit(doc.createdAt))}</td>
-        <td style="white-space:nowrap;">
-          <button type="button" class="link-action" data-dok-download="${esc(doc.id)}">Herunterladen</button>
-          <button type="button" class="link-action" data-dok-delete="${esc(doc.id)}" style="color:var(--red);">Löschen</button>
-        </td>
-      </tr>`).join('');
-    tbodyEl.querySelectorAll('[data-dok-download]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const doc = loadDokumente().find((d) => d.id === btn.getAttribute('data-dok-download'));
-        if (doc) downloadDokument(doc);
-      });
-    });
-    tbodyEl.querySelectorAll('[data-dok-delete]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        if (!window.confirm('Dieses Dokument wirklich löschen?')) return;
-        const id = btn.getAttribute('data-dok-delete');
-        saveDokumente(loadDokumente().filter((d) => d.id !== id));
-        render();
+
+    gridEl.innerHTML = items.map((d) => `
+      <div class="fo-card" data-dok-id="${esc(d.id)}">
+        <div class="fo-thumb">${/^image\//.test(d.mime || '') ? `<img src="${d.url}" alt="${esc(d.name)}" loading="lazy">` : `
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" style="margin:auto; color:var(--gray-400);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`}</div>
+        <div class="fo-meta">
+          <span class="fo-meta-date">${esc(fmtDatumZeitDok(d.addedAt))}</span>
+          <span class="fo-meta-tag fo-meta-tag-${d.quelle === 'protokoll' ? 'protokoll' : 'standort'}">${esc(d.typ || d.quelleLabel)}</span>
+        </div>
+        <div class="fo-meta-standort">${esc(d.standortLabel || '–')}</div>
+      </div>`).join('');
+
+    gridEl.querySelectorAll('[data-dok-id]').forEach((card) => {
+      card.addEventListener('click', () => {
+        const d = items.find((x) => x.id === card.getAttribute('data-dok-id'));
+        if (d) openPreview(d);
       });
     });
   }
 
-  document.querySelectorAll('[data-dok-filter]').forEach((input) => {
-    input.addEventListener('input', () => {
-      filters[input.getAttribute('data-dok-filter')] = input.value;
-      render();
-    });
-  });
+  const standortSel = document.getElementById('dok-filter-standort');
+  if (standortSel) standortSel.addEventListener('change', () => { filterStandort = standortSel.value; render(); });
+  const quelleSel = document.getElementById('dok-filter-quelle');
+  if (quelleSel) quelleSel.addEventListener('change', () => { filterQuelle = quelleSel.value; render(); });
+  const sortSel = document.getElementById('dok-sort');
+  if (sortSel) sortSel.addEventListener('change', () => { sortMode = sortSel.value; render(); });
+  const searchInput = document.getElementById('dok-search');
+  if (searchInput) searchInput.addEventListener('input', () => { searchQuery = searchInput.value.trim().toLowerCase(); render(); });
   const clearBtn = document.getElementById('dok-clear-filters');
   if (clearBtn) {
     clearBtn.addEventListener('click', () => {
-      filters = { betreff: '', mastLabel: '', datum: '', ersteller: '', datenerfasser: '', protokollName: '' };
-      document.querySelectorAll('[data-dok-filter]').forEach((input) => { input.value = ''; });
+      filterStandort = '';
+      filterQuelle = '';
+      sortMode = 'neu';
+      searchQuery = '';
+      if (standortSel) standortSel.value = '';
+      if (quelleSel) quelleSel.value = '';
+      if (sortSel) sortSel.value = 'neu';
+      if (searchInput) searchInput.value = '';
       render();
     });
   }
 
   window.levelbuildOnShowDokumente = render;
+  render();
+})();
+
+// ======================================================================
+// Pläne-Sammelseite: identisches Muster wie die Dokumente-Seite direkt
+// darüber, nur gefiltert auf isPlan (siehe collectAllProjectDokumente() /
+// isPlanDocType() weiter oben) - bewusst eine eigenständige IIFE (eigenes
+// #pl-grid) statt eines Umschalters auf der Dokumente-Seite, analog zum
+// "eigene Seite statt bestehenden Code verändern"-Muster dieser Codebasis.
+// ======================================================================
+(function () {
+  const gridEl = document.getElementById('pl-grid');
+  if (!gridEl) return;
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+  function fmtDatumZeitPl(iso) {
+    if (!iso) return '–';
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return String(iso);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch (e) { return String(iso); }
+  }
+
+  const modalOverlayPl = document.getElementById('modal-overlay');
+  const modalTitlePl = document.getElementById('modal-title');
+  const modalBodyPl = document.getElementById('modal-body');
+  const modalFooterPl = document.getElementById('modal-footer');
+  function openModalPl(title, bodyHtml, footerHtml) {
+    if (!modalOverlayPl) return;
+    modalTitlePl.textContent = title;
+    modalBodyPl.innerHTML = bodyHtml;
+    modalFooterPl.innerHTML = footerHtml || '';
+    modalOverlayPl.hidden = false;
+  }
+  function closeModalPl() { if (modalOverlayPl) modalOverlayPl.hidden = true; }
+
+  let filterStandort = '';
+  let filterTyp = '';
+  let sortMode = 'neu';
+  let searchQuery = '';
+
+  function downloadPlan(d) {
+    try {
+      const a = document.createElement('a');
+      a.href = d.url;
+      a.download = (d.name || 'Plan').replace(/[\\/:*?"<>|]+/g, '_');
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) { /* unkritisch */ }
+  }
+
+  function openPreviewPl(d) {
+    const isImg = /^image\//.test(d.mime || '');
+    const isPdf = /pdf/i.test(d.mime || '') || /\.pdf$/i.test(d.name || '');
+    const preview = isImg
+      ? `<img src="${d.url}" alt="${esc(d.name)}" style="max-width:100%; border-radius:8px;">`
+      : isPdf
+        ? `<iframe src="${d.url}" style="width:100%; height:60vh; border:1px solid var(--gray-200); border-radius:8px;"></iframe>`
+        : `<div class="changelog-empty">Keine Vorschau verfügbar - bitte herunterladen.</div>`;
+    const html = `
+      <div class="fo-lightbox">
+        ${preview}
+        <div class="fo-lightbox-info">
+          <div class="fzl-evt-row"><div class="fzl-evt-label">Standort/Element</div><div class="fzl-evt-value">${esc(d.standortLabel || '–')}</div></div>
+          <div class="fzl-evt-row"><div class="fzl-evt-label">Typ</div><div class="fzl-evt-value">${esc(d.typ || '–')}</div></div>
+          <div class="fzl-evt-row"><div class="fzl-evt-label">Datum</div><div class="fzl-evt-value">${esc(fmtDatumZeitPl(d.addedAt))}</div></div>
+          ${d.sourceFile ? `<div class="fzl-evt-row"><div class="fzl-evt-label">Quelldatei</div><div class="fzl-evt-value">${esc(d.sourceFile)}</div></div>` : ''}
+        </div>
+      </div>`;
+    openModalPl(d.name || 'Plan', html,
+      '<button type="button" class="matt-tool-btn" id="pl-lb-download">Herunterladen</button>' +
+      '<button type="button" class="matt-tool-btn" id="pl-lb-close">Schließen</button>');
+    const dl = document.getElementById('pl-lb-download');
+    if (dl) dl.addEventListener('click', () => downloadPlan(d));
+    const cl = document.getElementById('pl-lb-close');
+    if (cl) cl.addEventListener('click', closeModalPl);
+  }
+
+  function populateFiltersPl(items) {
+    const standortSel = document.getElementById('pl-filter-standort');
+    if (standortSel) {
+      const distinct = new Map();
+      items.forEach((d) => { if (d.standortKey && !distinct.has(d.standortKey)) distinct.set(d.standortKey, d.standortLabel); });
+      const sorted = Array.from(distinct.entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'de', { numeric: true }));
+      const current = standortSel.value;
+      standortSel.innerHTML = '<option value="">Alle Standorte</option>' + sorted.map(([key, label]) => `<option value="${esc(key)}">${esc(label)}</option>`).join('');
+      if (sorted.some(([key]) => key === current)) standortSel.value = current;
+    }
+    const typSel = document.getElementById('pl-filter-typ');
+    if (typSel) {
+      const types = Array.from(new Set(items.map((d) => d.typ).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'de'));
+      const current = typSel.value;
+      typSel.innerHTML = '<option value="">Alle Typen</option>' + types.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+      if (types.includes(current)) typSel.value = current;
+    }
+  }
+
+  function applyMastPrefillIfAnyPl() {
+    let prefill;
+    try { prefill = sessionStorage.getItem('levelbuild_plan_prefill_mast'); } catch (e) { prefill = null; }
+    if (!prefill) return;
+    try { sessionStorage.removeItem('levelbuild_plan_prefill_mast'); } catch (e) { /* ignore */ }
+    filterStandort = prefill;
+  }
+
+  function render() {
+    const crumbEl = document.getElementById('pl-crumb-projekt');
+    if (crumbEl) crumbEl.textContent = currentProjectLabel();
+    applyMastPrefillIfAnyPl();
+
+    const all = (typeof collectAllProjectDokumente === 'function') ? collectAllProjectDokumente().filter((d) => d.isPlan) : [];
+    populateFiltersPl(all);
+
+    let items = all.filter((d) => {
+      if (filterStandort && d.standortKey !== filterStandort && d.standortLabel !== filterStandort) return false;
+      if (filterTyp && d.typ !== filterTyp) return false;
+      if (searchQuery) {
+        const hay = [d.standortLabel, d.name, d.typ].filter(Boolean).join(' ').toLowerCase();
+        if (!hay.includes(searchQuery)) return false;
+      }
+      return true;
+    });
+
+    items.sort((a, b) => {
+      if (sortMode === 'standort') return String(a.standortLabel || '').localeCompare(String(b.standortLabel || ''), 'de', { numeric: true });
+      const da = String(a.addedAt || '');
+      const db = String(b.addedAt || '');
+      return sortMode === 'alt' ? da.localeCompare(db) : db.localeCompare(da);
+    });
+
+    const countEl = document.getElementById('pl-count');
+    if (countEl) countEl.textContent = String(items.length);
+    const emptyEl = document.getElementById('pl-empty');
+
+    if (!all.length) {
+      if (emptyEl) { emptyEl.hidden = false; emptyEl.textContent = 'Noch keine Pläne in diesem Projekt - Pläne entstehen automatisch, sobald beim Masttafel-/Elemente-Import eine Spalte „Datenpfad Lageplan" (o. ä.) mit einem Plan-Dokument verknüpft wurde.'; }
+      gridEl.innerHTML = '';
+      return;
+    }
+    if (!items.length) {
+      if (emptyEl) { emptyEl.hidden = false; emptyEl.textContent = 'Keine Pläne entsprechen der aktuellen Filterung/Suche.'; }
+      gridEl.innerHTML = '';
+      return;
+    }
+    if (emptyEl) emptyEl.hidden = true;
+
+    gridEl.innerHTML = items.map((d) => `
+      <div class="fo-card" data-pl-id="${esc(d.id)}">
+        <div class="fo-thumb">${/^image\//.test(d.mime || '') ? `<img src="${d.url}" alt="${esc(d.name)}" loading="lazy">` : `
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" style="margin:auto; color:var(--gray-400);"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>`}</div>
+        <div class="fo-meta">
+          <span class="fo-meta-date">${esc(fmtDatumZeitPl(d.addedAt))}</span>
+          <span class="fo-meta-tag fo-meta-tag-standort">${esc(d.typ || 'Plan')}</span>
+        </div>
+        <div class="fo-meta-standort">${esc(d.standortLabel || '–')}</div>
+      </div>`).join('');
+
+    gridEl.querySelectorAll('[data-pl-id]').forEach((card) => {
+      card.addEventListener('click', () => {
+        const d = items.find((x) => x.id === card.getAttribute('data-pl-id'));
+        if (d) openPreviewPl(d);
+      });
+    });
+  }
+
+  const standortSel = document.getElementById('pl-filter-standort');
+  if (standortSel) standortSel.addEventListener('change', () => { filterStandort = standortSel.value; render(); });
+  const typSel = document.getElementById('pl-filter-typ');
+  if (typSel) typSel.addEventListener('change', () => { filterTyp = typSel.value; render(); });
+  const sortSel = document.getElementById('pl-sort');
+  if (sortSel) sortSel.addEventListener('change', () => { sortMode = sortSel.value; render(); });
+  const searchInput = document.getElementById('pl-search');
+  if (searchInput) searchInput.addEventListener('input', () => { searchQuery = searchInput.value.trim().toLowerCase(); render(); });
+  const clearBtn = document.getElementById('pl-clear-filters');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      filterStandort = '';
+      filterTyp = '';
+      sortMode = 'neu';
+      searchQuery = '';
+      if (standortSel) standortSel.value = '';
+      if (typSel) typSel.value = '';
+      if (sortSel) sortSel.value = 'neu';
+      if (searchInput) searchInput.value = '';
+      render();
+    });
+  }
+
+  window.levelbuildOnShowPlaene = render;
+  render();
+})();
+
+// ======================================================================
+// Übersicht: Verknüpfungen-Kacheln (Projekt-weite Summen) - Nutzer-Wunsch:
+// "auch die Übersicht Seite ... andere Dokumenten Fotos Ereignis und
+// Bautagesbericht Kacheln gefüllt werden, so wie es logisch ist." Zählt über
+// das GESAMTE Projekt (nicht auf einen einzelnen Standort begrenzt, anders
+// als die gleichnamigen Kacheln auf Mast-/Element-Detail) und verlinkt in
+// die jeweilige Sammelseite. Eigenständige IIFE, chaint sich zusätzlich in
+// window.levelbuildOnShowUebersicht ein. Only runs when #ov-dok-tile exists.
+// ======================================================================
+(function () {
+  const tile = document.getElementById('ov-dok-tile');
+  if (!tile) return;
+
+  const goTo = (name) => { if (window.levelbuildGo) window.levelbuildGo(name); };
+  tile.addEventListener('click', () => goTo('dokumente'));
+  const planTile = document.getElementById('ov-plan-tile');
+  if (planTile) planTile.addEventListener('click', () => goTo('plaene'));
+  const fotoTile = document.getElementById('ov-foto-tile');
+  if (fotoTile) fotoTile.addEventListener('click', () => goTo('fotos'));
+  const ereignisTile = document.getElementById('ov-ereignis-tile');
+  if (ereignisTile) ereignisTile.addEventListener('click', () => goTo('bautagebuch-liste'));
+  const btTile = document.getElementById('ov-bt-tile');
+  if (btTile) btTile.addEventListener('click', () => goTo('bautagebuch-liste'));
+
+  function render() {
+    const alleDok = (typeof collectAllProjectDokumente === 'function') ? collectAllProjectDokumente() : [];
+    const dokCountEl = document.getElementById('ov-dok-count');
+    if (dokCountEl) { const n = alleDok.filter((d) => !d.isPlan).length; dokCountEl.textContent = `${n} Dokument${n === 1 ? '' : 'e'}`; }
+    const planCountEl = document.getElementById('ov-plan-count');
+    if (planCountEl) { const n = alleDok.filter((d) => d.isPlan).length; planCountEl.textContent = `${n} ${n === 1 ? 'Plan' : 'Pläne'}`; }
+
+    const fotoCountEl = document.getElementById('ov-foto-count');
+    if (fotoCountEl) {
+      const n = (typeof collectAllProjectFotos === 'function') ? collectAllProjectFotos().length : 0;
+      fotoCountEl.textContent = `${n} Foto${n === 1 ? '' : 's'}`;
+    }
+
+    const bautagebuecher = (typeof loadBautagebuecher === 'function') ? loadBautagebuecher() : [];
+    const ereignisCountEl = document.getElementById('ov-ereignis-count');
+    if (ereignisCountEl) {
+      const n = bautagebuecher.reduce((sum, r) => sum + (r.ereignisse || []).length, 0);
+      ereignisCountEl.textContent = `${n} Ereignis${n === 1 ? '' : 'se'}`;
+    }
+    const btCountEl = document.getElementById('ov-bt-count');
+    if (btCountEl) { const n = bautagebuecher.length; btCountEl.textContent = `${n} ${n === 1 ? 'Bautagebuch' : 'Bautagebücher'}`; }
+  }
+
+  const prevRenderOv = window.levelbuildOnShowUebersicht;
+  window.levelbuildOnShowUebersicht = function () {
+    if (prevRenderOv) prevRenderOv();
+    render();
+  };
   render();
 })();
 
@@ -13473,9 +14041,21 @@ function btRemoveNode(nodes, id) {
     if (sorted.some(([key]) => key === current)) sel.value = current;
   }
 
+  // Einmaliger Deep-Link von der Mastmaske (Verknüpfungen-Kachel "Fotos") -
+  // wird hier gelesen, als Standort-Filter übernommen und sofort wieder
+  // gelöscht, analog zum "Alle Dokumente dieses Masts"-Deep-Link.
+  function applyMastPrefillIfAnyFo() {
+    let prefill;
+    try { prefill = sessionStorage.getItem('levelbuild_foto_prefill_mast'); } catch (e) { prefill = null; }
+    if (!prefill) return;
+    try { sessionStorage.removeItem('levelbuild_foto_prefill_mast'); } catch (e) { /* ignore */ }
+    filterStandort = prefill;
+  }
+
   function render() {
     const crumbEl = document.getElementById('fo-crumb-projekt');
     if (crumbEl) crumbEl.textContent = currentProjectLabel();
+    applyMastPrefillIfAnyFo();
 
     const all = (typeof collectAllProjectFotos === 'function') ? collectAllProjectFotos() : [];
     populateStandortFilter(all);
