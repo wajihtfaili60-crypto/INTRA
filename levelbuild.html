@@ -1,10 +1,18 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" style="visibility:hidden">
 <head>
 <meta charset="UTF-8">
 <title>levelbuild</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="style.css?v=3">
+<!-- Firebase: Login + Cloud-Synchronisierung der Projektdaten (siehe
+     firebase-sync.js) - muss vor app.js geladen werden, damit die Daten
+     schon abgeglichen sind, bevor die eigentliche App startet. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="firebase-sync.js?v=1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
