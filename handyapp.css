@@ -727,12 +727,24 @@
   .ha-body{
     padding: 0;
     align-items: stretch;
+    /* Fallback-Kette: vh (überall unterstützt) -> eigene --vh-Variable (per
+       JS anhand window.innerHeight gesetzt, siehe handyapp.html - korrigiert
+       den bekannten Mobile-Safari-Bug, bei dem 100vh/100dvh die Adressleiste
+       nicht zuverlässig einrechnet) -> dvh (moderne Browser, gewinnt zuletzt
+       wenn unterstützt). Eine nicht unterstützte Zeile wird vom Browser
+       ignoriert, die vorherige gültige bleibt dann bestehen. */
+    min-height: 100vh;
+    min-height: calc(var(--vh, 1vh) * 100);
     min-height: 100dvh;
   }
   .ha-outer{ width: 100%; gap: 0; }
   .ha-phone{
     width: 100%;
+    height: 100vh;
+    height: calc(var(--vh, 1vh) * 100);
     height: 100dvh;
+    min-height: 100vh;
+    min-height: calc(var(--vh, 1vh) * 100);
     min-height: 100dvh;
     border-radius: 0;
     padding: 0;

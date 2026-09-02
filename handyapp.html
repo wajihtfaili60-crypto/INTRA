@@ -15,8 +15,24 @@
 <meta name="apple-mobile-web-app-title" content="levelbuild">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="handyapp.css">
+<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="handyapp.css?v=3">
+<!-- Fix für den klassischen Mobile-Safari-Bug: "100vh"/"100dvh" berücksichtigt
+     die Adressleiste nicht zuverlässig auf allen iOS-Versionen, wodurch Inhalt
+     abgeschnitten wirkt und darunter leerer Platz entsteht. Wir setzen daher
+     zusätzlich eine eigene CSS-Variable --vh anhand der tatsächlichen
+     Fenstergröße (window.innerHeight) - das ist die Standardlösung für dieses
+     Problem und greift als Rückfalloption, falls 100dvh nicht unterstützt wird. -->
+<script>
+(function(){
+  function setVh(){
+    document.documentElement.style.setProperty('--vh', (window.innerHeight * 0.01) + 'px');
+  }
+  setVh();
+  window.addEventListener('resize', setVh);
+  window.addEventListener('orientationchange', function(){ setTimeout(setVh, 100); });
+})();
+</script>
 </head>
 <body class="ha-body">
 
@@ -257,7 +273,7 @@
   <div class="ha-prototype-hint">Prototyp-Ansicht: eigenständige Handy-App, hier zur Vorschau in einem Telefon-Rahmen im Browser dargestellt. Sie liest/schreibt dieselben Daten wie <strong>levelbuild.html</strong>.</div>
 </div>
 
-<script src="app.js"></script>
-<script src="handyapp.js"></script>
+<script src="app.js?v=3"></script>
+<script src="handyapp.js?v=3"></script>
 </body>
 </html>
