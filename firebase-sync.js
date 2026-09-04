@@ -80,7 +80,7 @@
         user: (auth.currentUser && auth.currentUser.email) || null,
         action: action,
         detail: detail || '',
-        ok: ok === undefined ? null : !!ok,
+        ok: (ok === undefined || ok === null) ? null : !!ok,
       });
       if (list.length > DEBUG_LOG_MAX) list = list.slice(list.length - DEBUG_LOG_MAX);
       localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(list));
@@ -485,6 +485,28 @@
         if (change.doc.metadata.hasPendingWrites) return; // eigener, noch unbestätigter Schreibvorgang
         var data = change.doc.data();
         var lsKey = (data && data.key) || change.doc.id;
+        // WICHTIG: das Diagnose-Protokoll selbst (DEBUG_LOG_KEY) darf NIE
+        // einen Reload auslösen. Es wird - wie jeder andere Schlüssel -
+        // laufend mitsynchronisiert, ändert sich aber sehr häufig (bei
+        // praktisch jeder Aktion/jedem Sync-Versuch). Ohne diese Ausnahme
+        // entsteht eine Endlosschleife: jede neue Log-Zeile wird hochgeladen
+        // -> der eigene Echtzeit-Listener sieht die Änderung -> plant einen
+        // Reload -> der Reload selbst erzeugt neue Log-Zeilen (Erststart/
+        // Wiederholung-Einträge) -> die wiederum einen weiteren Reload
+        // auslösen, usw. Nutzer-gemeldeter Bug ("es wurde zurückgesetzt")
+        // war genau das: die Seite lud sich durch das Diagnose-Protokoll
+        // selbst laufend neu, mitten im eigentlichen Speichern/Hochladen.
+        // Der Wert wird trotzdem ganz normal lokal übernommen (damit das
+        // Protokoll auf allen Geräten sichtbar bleibt), nur eben ohne Reload.
+        if (lsKey === DEBUG_LOG_KEY) {
+          if (change.type === 'removed') { isHydrating = true; try { origRemoveItem(lsKey); } finally { isHydrating = false; } return; }
+          var dlValue = data && data.value;
+          if (typeof dlValue === 'string' && localStorage.getItem(lsKey) !== dlValue) {
+            isHydrating = true;
+            try { origSetItem(lsKey, dlValue); } finally { isHydrating = false; }
+          }
+          return;
+        }
         if (change.type === 'removed') {
           isHydrating = true;
           try { origRemoveItem(lsKey); } finally { isHydrating = false; }
