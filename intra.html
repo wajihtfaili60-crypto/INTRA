@@ -2,6 +2,38 @@
 <html lang="de" style="visibility:hidden">
 <head>
 <meta charset="UTF-8">
+<!-- Auto-Update: prüft bei jedem Laden per version.json (immer ungecacht
+     abgefragt, siehe fetch-Aufruf unten) ob eine neuere Version deployed
+     wurde, und lädt bei Bedarf automatisch mit einer garantiert nicht
+     gecachten Web-Adresse neu - kein manuelles Cache-Leeren mehr nötig.
+     Nutzer-Feedback: "sowas muss doch automatisch passieren mit der
+     appversion es ist ja keine echte [App]" - die bisherigen ?v=N-Parameter
+     an den einzelnen <script>-Dateien halfen nicht zuverlässig gegen
+     hartnäckiges Caching (v.a. bei "Zum Home-Bildschirm hinzufügen" auf
+     iOS, das die HTML-Seite selbst sehr hartnäckig cachen kann). Muss ganz
+     am Anfang stehen, vor allen anderen Scripts, damit im Zweifel gar
+     nicht erst mit veraltetem Code weitergemacht wird. -->
+<script>window.__INTRA_BUILD__ = '2026-09-04T09:42:55Z';</script>
+<script>
+(function () {
+  try {
+    var GUARD_KEY = '__intra_version_reload_count';
+    var count = parseInt(sessionStorage.getItem(GUARD_KEY) || '0', 10) || 0;
+    if (count >= 2) return; // Sicherheitsnetz: nie mehr als 2x pro Tab-Sitzung neu laden
+    fetch('version.json?_=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.version && data.version !== window.__INTRA_BUILD__) {
+          sessionStorage.setItem(GUARD_KEY, String(count + 1));
+          var url = new URL(location.href);
+          url.searchParams.set('_v', Date.now());
+          location.replace(url.toString());
+        }
+      })
+      .catch(function () { /* offline/Netzwerkfehler - mit aktuell geladenem Stand weitermachen */ });
+  } catch (e) { /* darf das Laden der App nie verhindern */ }
+})();
+</script>
 <title>Intra</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="style.css?v=3">
