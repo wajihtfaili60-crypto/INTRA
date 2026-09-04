@@ -189,6 +189,47 @@
   var origRemoveItem = localStorage.removeItem.bind(localStorage);
   var pendingUploads = {};
 
+  // -----------------------------------------------------------------------
+  // Dauerhafte Warteschlange ("dieser Schlüssel muss noch hochgeladen
+  // werden") - Nutzer-Meldung: "hab genau das wie vorhin gemacht" + "es
+  // wurde zurückgesetzt" (die App lud neu, bevor die Daten ankamen). Der
+  // GRUNDLEGENDE Fehler: pendingUploads oben lebt nur im Arbeitsspeicher
+  // dieser einen Seitenansicht. Lädt die Seite neu - ob durch die App selbst
+  // (initialSync()/scheduleReload() unten) oder weil iOS/Android eine im
+  // Hintergrund liegende Browser-Seite beendet, was auf dem Handy sehr
+  // schnell nach dem Speichern passieren kann - ist dieser Zwischenspeicher
+  // komplett weg. Die Daten selbst bleiben zwar sicher in localStorage (das
+  // übersteht einen Reload), aber NICHTS erinnert sich mehr daran, dass sie
+  // noch hochgeladen werden müssen - der 700ms-Timer bzw. der pagehide-
+  // Sofort-Upload (siehe flushPendingUploads) sind beide bereits Geschichte.
+  // Fix: JEDE geplante Änderung wird zusätzlich SOFORT (synchron, per
+  // origSetItem - bewusst nicht der öffentliche localStorage.setItem, sonst
+  // würde sich diese Warteschlange selbst als "zu synchronisieren" eintragen)
+  // in einem eigenen, dauerhaften Schlüssel vermerkt. Bei jedem App-Start
+  // (retryPendingQueueOnStartup(), aufgerufen bevor überhaupt Cloud-Daten
+  // gezogen werden) wird diese Liste zuerst abgearbeitet - unabhängig davon,
+  // ob die vorherige Seitenansicht sauber beendet wurde oder abrupt verschwand.
+  var PENDING_QUEUE_KEY = '__intra_pending_sync_keys';
+  function loadPendingQueue() {
+    try {
+      var q = JSON.parse(origGetItem(PENDING_QUEUE_KEY) || '[]');
+      return Array.isArray(q) ? q : [];
+    } catch (e) { return []; }
+  }
+  function origGetItem(key) { return localStorage.getItem(key); } // getItem wird nie umhüllt, rein zur Konsistenz benannt
+  function markPendingInQueue(key) {
+    try {
+      var q = loadPendingQueue();
+      if (q.indexOf(key) === -1) { q.push(key); origSetItem(PENDING_QUEUE_KEY, JSON.stringify(q)); }
+    } catch (e) { /* ignore */ }
+  }
+  function unmarkPendingInQueue(key) {
+    try {
+      var q = loadPendingQueue().filter(function (k) { return k !== key; });
+      origSetItem(PENDING_QUEUE_KEY, JSON.stringify(q));
+    } catch (e) { /* ignore */ }
+  }
+
   localStorage.setItem = function (key, value) {
     origSetItem(key, value);
     if (isHydrating) return;
@@ -206,13 +247,18 @@
 
   function runUpload(key, value, reason) {
     return uploadKey(key, value).then(function () {
+      unmarkPendingInQueue(key);
       if (key !== DEBUG_LOG_KEY) logDebugEvent('sync_upload', key + ' (' + reason + ')', true);
     }).catch(function (e) {
+      // Bewusst NICHT aus der Warteschlange entfernt - ein fehlgeschlagener
+      // Versuch bleibt vorgemerkt und wird beim nächsten App-Start erneut
+      // versucht (retryPendingQueueOnStartup), statt verloren zu gehen.
       console.warn('Intra-Sync: Hochladen fehlgeschlagen für', key, e);
       if (key !== DEBUG_LOG_KEY) logDebugEvent('sync_upload', key + ' (' + reason + '): ' + (e && e.message ? e.message : e), false);
     });
   }
   function scheduleUpload(key, value) {
+    if (key !== PENDING_QUEUE_KEY) markPendingInQueue(key);
     if (pendingUploads[key]) clearTimeout(pendingUploads[key].timer);
     var entry = { value: value, timer: null };
     entry.timer = setTimeout(function () {
@@ -234,8 +280,10 @@
   // geht oder geschlossen wird, alle noch wartenden Uploads SOFORT auslösen,
   // statt auf den Timer zu warten. Keine 100%-Garantie (ein bereits
   // begonnener Netzwerk-Request kann bei einem harten Schließen trotzdem
-  // abbrechen), aber deckt den weit häufigeren Fall ab, dass die Seite nach
-  // dem Speichern normal verlassen/in den Hintergrund geschickt wird.
+  // abbrechen - DESHALB zusätzlich die dauerhafte Warteschlange oben, die
+  // genau diesen Rest-Fall beim nächsten App-Start nachholt), aber deckt den
+  // weit häufigeren Fall ab, dass die Seite nach dem Speichern normal
+  // verlassen/in den Hintergrund geschickt wird.
   function flushPendingUploads() {
     Object.keys(pendingUploads).forEach(function (key) {
       var entry = pendingUploads[key];
@@ -243,6 +291,22 @@
       delete pendingUploads[key];
       runUpload(key, entry.value, 'Sofort - Seite verlassen');
     });
+  }
+  // Beim App-Start aufgerufen (vor initialSync/pullAllFromCloud): jeder noch
+  // offene Posten aus einer vorherigen, abgebrochenen Sitzung wird mit dem
+  // AKTUELLEN localStorage-Wert (der einen Reload/Absturz übersteht) erneut
+  // hochgeladen. Läuft bewusst VOR dem Cloud-Abgleich, damit ein lokal noch
+  // nicht hochgeladener Stand nicht durch einen älteren Cloud-Stand verdeckt
+  // wird, und wird abgewartet, bevor initialSync ggf. neu lädt.
+  function retryPendingQueueOnStartup() {
+    var queue = loadPendingQueue();
+    if (!queue.length) return Promise.resolve();
+    logDebugEvent('sync_retry_queue', queue.length + ' offene(r) Posten aus vorheriger Sitzung: ' + queue.join(', '), null);
+    return Promise.all(queue.map(function (key) {
+      var value = localStorage.getItem(key);
+      if (value == null) { unmarkPendingInQueue(key); return Promise.resolve(); }
+      return runUpload(key, value, 'Wiederholung nach Neustart');
+    }));
   }
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'hidden') flushPendingUploads();
@@ -505,7 +569,15 @@
       return;
     }
     renderLoading('Anmeldung erfolgreich, Daten werden synchronisiert…');
-    Promise.all([ensureUserProfile(user), initialSync()]).then(function () {
+    // retryPendingQueueOnStartup() bewusst zuerst und abgewartet (nicht Teil
+    // des Promise.all) - erst wenn alle Altlasten aus einer evtl. abrupt
+    // beendeten vorherigen Sitzung hochgeladen sind, macht der übliche
+    // Cloud-Abgleich (der bei vorhandenen Cloud-Daten einmalig neu lädt)
+    // weiter, damit dieser Reload nicht schon wieder einen gerade erst
+    // wiederholten Upload unterbricht.
+    retryPendingQueueOnStartup().then(function () {
+      return Promise.all([ensureUserProfile(user), initialSync()]);
+    }).then(function () {
       startRealtimeListener();
       hideOverlay();
       resolveUserReady(window.intraCurrentUser);
