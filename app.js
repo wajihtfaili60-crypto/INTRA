@@ -7832,6 +7832,67 @@ function btRemoveNode(nodes, id) {
 })();
 
 // ======================================================================
+// Diagnose-Protokoll (Projekte-Seite, Tab „Vorlagen") - Desktop-Gegenstück
+// zum "Diagnose"-Knopf in der Handy-App (siehe dort renderDiagnoseLog()).
+// Zeigt das von logDebugEvent() (firebase-sync.js) mitgeschriebene
+// Protokoll als Text mit Kopieren-Knopf. Rein lesend, kein Rollen-Gate -
+// reine Betriebsdiagnose. Only runs when #diag-text existiert.
+// ======================================================================
+(function () {
+  const textEl = document.getElementById('diag-text');
+  if (!textEl) return;
+
+  function fmtDiagTs(iso) {
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return String(iso);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    } catch (e) { return String(iso); }
+  }
+  function render() {
+    let list;
+    try { list = JSON.parse(localStorage.getItem('levelbuild_debug_log') || '[]'); } catch (e) { list = []; }
+    if (!Array.isArray(list)) list = [];
+    const countEl = document.getElementById('diag-count');
+    if (countEl) countEl.textContent = String(list.length);
+    textEl.textContent = list.length
+      ? list.slice().reverse().map((e) => {
+          const status = e.ok === true ? 'OK' : (e.ok === false ? 'FEHLER' : '·');
+          return `[${fmtDiagTs(e.ts)}] ${e.device || '?'} · ${status} · ${e.action}\n${e.detail}`;
+        }).join('\n\n')
+      : 'Noch keine Einträge.';
+  }
+
+  const refreshBtn = document.getElementById('diag-refresh');
+  if (refreshBtn) refreshBtn.addEventListener('click', render);
+  const copyBtn = document.getElementById('diag-copy');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(textEl.textContent);
+        copyBtn.textContent = 'Kopiert!';
+      } catch (e) {
+        const range = document.createRange();
+        range.selectNodeContents(textEl);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        copyBtn.textContent = 'Bitte manuell kopieren (markiert)';
+      }
+      setTimeout(() => { copyBtn.textContent = 'In Zwischenablage kopieren'; }, 2500);
+    });
+  }
+
+  const prevRenderDiag = window.levelbuildOnShowProjekteVorlagen;
+  window.levelbuildOnShowProjekteVorlagen = function () {
+    if (prevRenderDiag) prevRenderDiag();
+    render();
+  };
+  render();
+})();
+
+// ======================================================================
 // Masttafel: real import (native file picker / drag-drop), parsed
 // client-side with SheetJS, with Bauwerksnummer-keyed versioning,
 // column show/hide + freeze + saved views, zoom, a Bauwerk detail modal

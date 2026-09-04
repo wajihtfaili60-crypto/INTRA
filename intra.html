@@ -277,6 +277,29 @@
           <div id="usr-list"><div class="changelog-empty">Wird geladen…</div></div>
         </div>
       </div>
+
+      <!-- Diagnose-Protokoll: Nutzer-Wunsch "füge irgendwas ein wo du immer
+           genau sehen kannst was ich gemacht habe und wann und wie ... so
+           dass du immer selber auslesen kannst" - siehe logDebugEvent() in
+           firebase-sync.js. Gegenstück zum "Diagnose"-Knopf in der
+           Handy-App, hier immer sichtbar (kein Rollen-Gate - reine
+           Betriebsdiagnose, keine sensiblen Nutzerdaten). -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-header-left">
+            <span>Diagnose-Protokoll</span>
+            <span class="badge-mini" id="diag-count">0</span>
+          </span>
+          <button class="link-action" id="diag-refresh">Aktualisieren</button>
+        </div>
+        <div class="panel-body">
+          <div style="font-size:12px; color:var(--gray-500); margin-top:-8px;">
+            Was auf diesem und anderen Geräten wann gemacht und synchronisiert wurde (letzte 400 Einträge, neueste zuerst) - zum schnellen Weitergeben statt Screenshots.
+          </div>
+          <button type="button" class="matt-tool-btn" id="diag-copy" style="align-self:flex-start;">In Zwischenablage kopieren</button>
+          <pre id="diag-text" style="white-space:pre-wrap; word-break:break-word; font-size:11.5px; line-height:1.5; max-height:340px; overflow-y:auto; background:var(--gray-50); border:1px solid var(--gray-200); border-radius:8px; padding:10px 12px; margin:0;"></pre>
+        </div>
+      </div>
     </div>
   </div>
 </div>

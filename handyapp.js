@@ -1172,6 +1172,9 @@
     all[mastKey] = forMast;
     saveMastTaskStatus(all);
     applyTaskAbschluss(mastKey, task, list, isStatusErledigt(next));
+    if (typeof window.intraLogEvent === 'function' && state.currentMast) {
+      window.intraLogEvent('status_pill', `Mast ${state.currentMast.displayKey} · Aufgabe "${task ? task.titel : taskId}" · Status -> ${next.label}`, true);
+    }
     renderMastTabTaetigkeitsliste();
   }
 
@@ -1733,7 +1736,21 @@
       saveMastProtokollDaten(all);
       // Nur als erledigt markieren, wenn wirklich Daten eingegeben wurden -
       // ein leer gespeichertes Protokoll lässt die Tätigkeit "Nicht erledigt".
-      if (hasManualAnswerData(protokollFormState.protokoll, answers)) {
+      const wirdErledigt = hasManualAnswerData(protokollFormState.protokoll, answers);
+      // Diagnose-Log (Nutzer-Wunsch: nachvollziehen können, was wann wie
+      // gespeichert wurde) - listet je Baustein, ob isBausteinAnswered ihn
+      // als beantwortet zählt, damit sich genau nachvollziehen lässt, WARUM
+      // eine Tätigkeit erledigt/nicht erledigt wurde.
+      if (typeof window.intraLogEvent === 'function') {
+        const bausteinSummary = protokollFormState.protokoll.bausteine
+          .filter((b) => b.type !== 'abschnitt')
+          .map((b) => `${b.label || b.type}=${isBausteinAnswered(b, answers[b.id]) ? 'ja' : 'nein'}`)
+          .join(', ');
+        window.intraLogEvent('protokoll_speichern',
+          `Mast ${state.currentMast.displayKey} · Aufgabe "${protokollFormState.task.titel}" · Protokoll "${protokollFormState.protokoll.name}" · wird ${wirdErledigt ? 'ERLEDIGT' : 'NICHT erledigt'} · Felder: ${bausteinSummary}`,
+          true);
+      }
+      if (wirdErledigt) {
         markTaskDoneIfRequired(protokollFormState.list, protokollFormState.task, protokollFormState.protokoll.id);
       } else {
         markTaskNotDone(protokollFormState.list, protokollFormState.task);
@@ -1816,6 +1833,67 @@
   const projekteRefreshBtn = document.getElementById('ha-projekte-refresh');
   if (projekteRefreshBtn) {
     projekteRefreshBtn.addEventListener('click', () => { window.location.reload(); });
+  }
+
+  // ----------------------------------------------------------------------
+  // Diagnose-Protokoll-Ansicht - siehe logDebugEvent() in firebase-sync.js
+  // und die Log-Aufrufe in dieser Datei (protokoll_speichern/status_pill).
+  // Rein lesend, formatiert das rohe JSON-Array menschenlesbar (neuestes
+  // zuerst) und bietet einen Kopieren-Knopf, damit der Nutzer den kompletten
+  // Verlauf mit einem Klick weitergeben kann, statt Screenshots zu machen.
+  // ----------------------------------------------------------------------
+  function fmtDiagnoseTs(iso) {
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return String(iso);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    } catch (e) { return String(iso); }
+  }
+  function renderDiagnoseLog() {
+    const textEl = document.getElementById('ha-diagnose-text');
+    if (!textEl) return;
+    let list;
+    try { list = JSON.parse(localStorage.getItem('levelbuild_debug_log') || '[]'); } catch (e) { list = []; }
+    if (!Array.isArray(list) || !list.length) {
+      textEl.textContent = 'Noch keine Einträge. Führe eine Aktion aus (z.B. ein Protokoll speichern), dann hier erneut öffnen.';
+      return;
+    }
+    textEl.textContent = list.slice().reverse().map((e) => {
+      const status = e.ok === true ? 'OK' : (e.ok === false ? 'FEHLER' : '·');
+      return `[${fmtDiagnoseTs(e.ts)}] ${e.device || '?'} · ${status} · ${e.action}\n${e.detail}`;
+    }).join('\n\n');
+  }
+  const diagnoseOpenBtn = document.getElementById('ha-diagnose-open');
+  const diagnoseOverlay = document.getElementById('ha-overlay-diagnose');
+  if (diagnoseOpenBtn && diagnoseOverlay) {
+    diagnoseOpenBtn.addEventListener('click', () => {
+      renderDiagnoseLog();
+      diagnoseOverlay.hidden = false;
+    });
+  }
+  const diagnoseCloseBtn = document.getElementById('ha-diagnose-close');
+  if (diagnoseCloseBtn) diagnoseCloseBtn.addEventListener('click', () => { diagnoseOverlay.hidden = true; });
+  const diagnoseCopyBtn = document.getElementById('ha-diagnose-copy');
+  if (diagnoseCopyBtn) {
+    diagnoseCopyBtn.addEventListener('click', async () => {
+      const text = document.getElementById('ha-diagnose-text').textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        diagnoseCopyBtn.textContent = 'Kopiert!';
+      } catch (e) {
+        // Clipboard-API evtl. nicht verfügbar (z.B. sehr alter Browser/kein
+        // sicherer Kontext) - Text stattdessen markieren, damit manuelles
+        // Kopieren per Hand noch möglich ist.
+        const range = document.createRange();
+        range.selectNodeContents(document.getElementById('ha-diagnose-text'));
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        diagnoseCopyBtn.textContent = 'Bitte manuell kopieren (markiert)';
+      }
+      setTimeout(() => { diagnoseCopyBtn.textContent = 'In Zwischenablage kopieren'; }, 2500);
+    });
   }
 
   // ---------- Start ----------

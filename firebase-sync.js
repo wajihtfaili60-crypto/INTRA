@@ -52,6 +52,43 @@
   var RELOAD_FLAG_KEY = '__lb_reloaded_after_hydrate';
 
   // -----------------------------------------------------------------------
+  // Diagnose-Protokoll: Nutzer-Wunsch "füge irgendwas ein wo du immer genau
+  // sehen kannst was ich gemacht habe und wann und wie ... so dass du immer
+  // selber auslesen kannst" - da Claude keinen Login/Firebase-Console-Zugriff
+  // hat, schreibt die App ab sofort jeden wichtigen Schritt (Aktion UND
+  // Sync-Versuch mit Erfolg/Fehlergrund) in einen eigenen, bewusst GLOBALEN
+  // (nicht pKey()-gescopten - diese Datei kennt pKey()/currentProjectId()
+  // nicht, sie lädt vor app.js) localStorage-Schlüssel. Wird wie jeder andere
+  // Schlüssel automatisch mitsynchronisiert, UND ist über den "Diagnose"-
+  // Knopf in der Handy-App (Projekte-Auswahl) bzw. auf der Desktop-Projekte-
+  // Seite direkt als Text zum Kopieren einsehbar - ein Klick, kein
+  // Screenshot-Hin-und-Her mehr nötig. Auf eine feste Maximalzahl begrenzt,
+  // damit der Schlüssel nicht unbegrenzt wächst.
+  var DEBUG_LOG_KEY = 'levelbuild_debug_log';
+  var DEBUG_LOG_MAX = 400;
+  function deviceLabel() {
+    return /handyapp\.html/i.test(location.pathname) ? 'Handy' : 'PC';
+  }
+  function logDebugEvent(action, detail, ok) {
+    try {
+      var list;
+      try { list = JSON.parse(localStorage.getItem(DEBUG_LOG_KEY) || '[]'); } catch (e) { list = []; }
+      if (!Array.isArray(list)) list = [];
+      list.push({
+        ts: new Date().toISOString(),
+        device: deviceLabel(),
+        user: (auth.currentUser && auth.currentUser.email) || null,
+        action: action,
+        detail: detail || '',
+        ok: ok === undefined ? null : !!ok,
+      });
+      if (list.length > DEBUG_LOG_MAX) list = list.slice(list.length - DEBUG_LOG_MAX);
+      localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(list));
+    } catch (e) { /* Diagnose-Protokoll darf die App nie zum Absturz bringen */ }
+  }
+  window.intraLogEvent = logDebugEvent;
+
+  // -----------------------------------------------------------------------
   // Overlay: Login-Formular + Ladeanzeige
   // -----------------------------------------------------------------------
   var styleTag = document.createElement('style');
@@ -167,14 +204,20 @@
     return String(key).replace(/\//g, '_').slice(0, 1500);
   }
 
+  function runUpload(key, value, reason) {
+    return uploadKey(key, value).then(function () {
+      if (key !== DEBUG_LOG_KEY) logDebugEvent('sync_upload', key + ' (' + reason + ')', true);
+    }).catch(function (e) {
+      console.warn('Intra-Sync: Hochladen fehlgeschlagen für', key, e);
+      if (key !== DEBUG_LOG_KEY) logDebugEvent('sync_upload', key + ' (' + reason + '): ' + (e && e.message ? e.message : e), false);
+    });
+  }
   function scheduleUpload(key, value) {
     if (pendingUploads[key]) clearTimeout(pendingUploads[key].timer);
     var entry = { value: value, timer: null };
     entry.timer = setTimeout(function () {
       delete pendingUploads[key];
-      uploadKey(key, value).catch(function (e) {
-        console.warn('Intra-Sync: Hochladen fehlgeschlagen für', key, e);
-      });
+      runUpload(key, value, 'Timer');
     }, 700);
     pendingUploads[key] = entry;
   }
@@ -198,9 +241,7 @@
       var entry = pendingUploads[key];
       clearTimeout(entry.timer);
       delete pendingUploads[key];
-      uploadKey(key, entry.value).catch(function (e) {
-        console.warn('Intra-Sync: Hochladen fehlgeschlagen für', key, e);
-      });
+      runUpload(key, entry.value, 'Sofort - Seite verlassen');
     });
   }
   document.addEventListener('visibilitychange', function () {
@@ -209,9 +250,12 @@
   window.addEventListener('pagehide', flushPendingUploads);
 
   function scheduleDelete(key) {
-    if (pendingUploads[key]) { clearTimeout(pendingUploads[key]); delete pendingUploads[key]; }
-    db.collection(SYNC_COLLECTION).doc(docIdFor(key)).delete().catch(function (e) {
+    if (pendingUploads[key]) { clearTimeout(pendingUploads[key].timer); delete pendingUploads[key]; }
+    db.collection(SYNC_COLLECTION).doc(docIdFor(key)).delete().then(function () {
+      logDebugEvent('sync_delete', key, true);
+    }).catch(function (e) {
       console.warn('Intra-Sync: Löschen fehlgeschlagen für', key, e);
+      logDebugEvent('sync_delete', key + ': ' + (e && e.message ? e.message : e), false);
     });
   }
 
@@ -265,31 +309,42 @@
     if (blobs.length === 0) return saveDocForKey(key, rawValue);
 
     var clone = JSON.parse(rawValue);
+    var blobFailures = [];
     var uploads = blobs.map(function (b) {
       return uploadDataUrlToStorage(b.value, [key].concat(b.path))
         .then(function (url) { setAtPath(clone, b.path, url || ''); })
         .catch(function (e) {
           console.warn('Intra-Sync: Storage-Upload fehlgeschlagen für', key, b.path, e);
+          blobFailures.push(b.path.join('.') + ': ' + (e && e.message ? e.message : e));
           setAtPath(clone, b.path, '');
         });
     });
     return Promise.all(uploads).then(function () {
+      if (blobFailures.length) {
+        logDebugEvent('sync_blob_upload', key + ' - ' + blobFailures.length + ' von ' + blobs.length + ' Datei(en) fehlgeschlagen: ' + blobFailures.join(' | '), false);
+      } else if (blobs.length) {
+        logDebugEvent('sync_blob_upload', key + ' - ' + blobs.length + ' Datei(en) hochgeladen', true);
+      }
       return saveDocForKey(key, JSON.stringify(clone));
     });
   }
 
+  // WICHTIG: wirft absichtlich weiter (kein eigenes .catch() mehr hier) -
+  // der Aufrufer (runUpload) protokolliert Erfolg/Misserfolg zentral im
+  // Diagnose-Log; ein hier verschluckter Fehler wäre dort nie sichtbar
+  // gewesen (genau das hat die Fehlersuche beim Nutzer erschwert: der Fehler
+  // landete nur in der Browser-Konsole, die niemand außer ihm selbst sieht).
   function saveDocForKey(key, valueString) {
     if (valueString.length > MAX_DOC_CHARS) {
-      console.warn('Intra-Sync: übersprungen (zu groß für Firestore):', key, valueString.length, 'Zeichen');
-      return Promise.resolve();
+      var msg = 'übersprungen - zu groß für Firestore (' + valueString.length + ' Zeichen, Limit ' + MAX_DOC_CHARS + ')';
+      console.warn('Intra-Sync:', msg, key);
+      return Promise.reject(new Error(msg));
     }
     return db.collection(SYNC_COLLECTION).doc(docIdFor(key)).set({
       key: key,
       value: valueString,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: (auth.currentUser && auth.currentUser.email) || null
-    }).catch(function (e) {
-      console.warn('Intra-Sync: Hochladen fehlgeschlagen für', key, e);
     });
   }
 
@@ -332,12 +387,15 @@
     return db.collection(SYNC_COLLECTION).limit(1).get().then(function (snap) {
       if (snap.empty) {
         renderLoading('Erststart: vorhandene Daten werden in die Cloud übertragen…');
+        logDebugEvent('login_sync', 'Erststart - Cloud leer, lade lokale Daten hoch', true);
         return seedCloudFromLocalStorage();
       }
       renderLoading('Daten werden geladen…');
+      logDebugEvent('login_sync', 'Cloud hat Daten - übernehme Cloud-Stand lokal', true);
       return pullAllFromCloud().then(function () {
         if (!sessionStorage.getItem(RELOAD_FLAG_KEY)) {
           sessionStorage.setItem(RELOAD_FLAG_KEY, '1');
+          logDebugEvent('login_sync', 'einmaliger Reload nach Cloud-Übernahme', true);
           location.reload();
           return new Promise(function () {}); // Seite lädt eh neu, hier anhalten
         }
@@ -358,6 +416,7 @@
   function startRealtimeListener() {
     db.collection(SYNC_COLLECTION).onSnapshot(function (snap) {
       var changedRemotely = false;
+      var changedKeys = [];
       snap.docChanges().forEach(function (change) {
         if (change.doc.metadata.hasPendingWrites) return; // eigener, noch unbestätigter Schreibvorgang
         var data = change.doc.data();
@@ -366,6 +425,7 @@
           isHydrating = true;
           try { origRemoveItem(lsKey); } finally { isHydrating = false; }
           changedRemotely = true;
+          changedKeys.push(lsKey + ' (gelöscht)');
           return;
         }
         var newValue = data && data.value;
@@ -374,10 +434,15 @@
         isHydrating = true;
         try { origSetItem(lsKey, newValue); } finally { isHydrating = false; }
         changedRemotely = true;
+        changedKeys.push(lsKey);
       });
-      if (changedRemotely) scheduleReload();
+      if (changedRemotely) {
+        logDebugEvent('remote_change', changedKeys.join(', ') + ' - Reload in 1.2s geplant', true);
+        scheduleReload();
+      }
     }, function (err) {
       console.warn('Intra-Sync: Listener-Fehler', err);
+      logDebugEvent('remote_change', 'Listener-Fehler: ' + (err && err.message ? err.message : err), false);
     });
   }
 
