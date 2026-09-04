@@ -421,6 +421,15 @@
     for (var i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
     var chain = Promise.resolve();
     keys.forEach(function (key) {
+      // PENDING_QUEUE_KEY ist reine, geräte-lokale Buchhaltung (welche
+      // Schlüssel auf DIESEM Gerät noch hochgeladen werden müssen) - hat in
+      // der gemeinsamen Cloud-Datenbank nichts verloren. Ohne diese Ausnahme
+      // würde ein Erststart (leere Cloud) sie versehentlich mit hochladen,
+      // und jede spätere lokale Änderung daran (die den normalen
+      // localStorage.setItem-Wrapper bewusst umgeht, siehe markPendingInQueue)
+      // würde auf ANDEREN Geräten als "änderte sich remote" ankommen, ohne
+      // je wieder aktualisiert zu werden - ein stiller Karteileichen-Eintrag.
+      if (key === PENDING_QUEUE_KEY) return;
       chain = chain.then(function () {
         var value = localStorage.getItem(key);
         if (value == null) return;
