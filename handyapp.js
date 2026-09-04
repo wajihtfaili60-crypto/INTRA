@@ -1915,5 +1915,14 @@
   }
 
   // ---------- Start ----------
-  renderProjekteList();
+  // Bewusst auf window.intraUserReady verzögert (von firebase-sync.js
+  // bereitgestellt) statt sofort zu rendern - sonst zeigt die allererste
+  // Ansicht noch den lokalen Stand von VOR dem Cloud-Abgleich. Siehe
+  // ausführlicher Kommentar bei initialSync() in firebase-sync.js sowie die
+  // gleiche Änderung in intra.html.
+  if (window.intraUserReady && typeof window.intraUserReady.then === 'function') {
+    window.intraUserReady.then(renderProjekteList, renderProjekteList);
+  } else {
+    renderProjekteList();
+  }
 })();

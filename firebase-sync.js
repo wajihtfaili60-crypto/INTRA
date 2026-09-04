@@ -23,8 +23,9 @@
    - Beim ersten Login auf einem Gerät wird entweder (a) die Cloud-Datenbank
      erstmalig mit den schon vorhandenen lokalen Daten befüllt (falls die
      Cloud noch leer ist - Schutz vor Datenverlust beim Umstieg), oder (b)
-     der aktuelle Cloud-Stand lokal übernommen (danach einmaliger Neuladen
-     der Seite, damit die App mit den frischen Daten startet).
+     der aktuelle Cloud-Stand lokal übernommen. intra.html/handyapp.js warten
+     mit ihrem allerersten Rendern auf window.intraUserReady, damit die App
+     direkt mit den frischen Daten startet - kein Neuladen der Seite nötig.
    - Ändert sich etwas auf einem ANDEREN Gerät, wird das per Firestore-
      Echtzeit-Listener erkannt und die Seite lädt automatisch neu.
    ========================================================================= */
@@ -49,7 +50,6 @@
   var SYNC_COLLECTION = 'sync_data';
   var BLOB_SIZE_THRESHOLD = 40 * 1024; // ab 40 KB wird ein Base64-Feld ausgelagert
   var MAX_DOC_CHARS = 900000; // Sicherheitsabstand zum 1-MB-Firestore-Limit
-  var RELOAD_FLAG_KEY = '__lb_reloaded_after_hydrate';
 
   // -----------------------------------------------------------------------
   // Diagnose-Protokoll: Nutzer-Wunsch "füge irgendwas ein wo du immer genau
@@ -456,6 +456,27 @@
     });
   }
 
+  // WICHTIG (Fehlerursache des Nutzer-gemeldeten Bugs "Handy speichert
+  // erfolgreich, PC zeigt trotzdem den alten Stand"): intra.html/handyapp.js
+  // rendern ihre allererste Seite/Ansicht GANZ AM ENDE ihres eigenen
+  // <script>-Blocks, also synchron und SOFORT beim Laden - unabhängig davon,
+  // ob diese Funktion hier (asynchron, ein Firestore-Roundtrip) schon fertig
+  // ist. Früher wurde dieses Wettrennen mit einem einmaligen location.reload()
+  // "gelöst" (sessionStorage-Flag, damit es nicht in eine Endlosschleife
+  // läuft) - das Problem dabei: das Flag blieb für den GESAMTEN Browser-Tab
+  // gesetzt, also fand dieser Reload nur beim allerersten Laden der Seite in
+  // dieser Sitzung statt. Bei JEDEM weiteren Neuladen (z.B. ausgelöst vom
+  // Echtzeit-Listener unten, weil sich auf einem anderen Gerät etwas
+  // geändert hat) wurde zwar der frische Cloud-Stand ganz normal in
+  // localStorage geschrieben, aber die Seite hatte sich bereits VORHER (mit
+  // den noch alten, nicht aktualisierten Werten) fertig gerendert - und weil
+  // kein weiterer Reload mehr erzwungen wurde, blieb genau dieser veraltete
+  // Stand sichtbar stehen, obwohl in localStorage (und in der Cloud) längst
+  // die richtigen Daten lagen. Der eigentliche Fix: kein Reload mehr nötig -
+  // intra.html/handyapp.js warten jetzt stattdessen mit ihrem allerersten
+  // Rendern auf window.intraUserReady (wird erst erfüllt, NACHDEM diese
+  // Funktion hier fertig ist), sodass die erste Anzeige garantiert schon die
+  // frischen, gerade übernommenen Cloud-Daten zeigt.
   function initialSync() {
     return db.collection(SYNC_COLLECTION).limit(1).get().then(function (snap) {
       if (snap.empty) {
@@ -465,14 +486,7 @@
       }
       renderLoading('Daten werden geladen…');
       logDebugEvent('login_sync', 'Cloud hat Daten - übernehme Cloud-Stand lokal', true);
-      return pullAllFromCloud().then(function () {
-        if (!sessionStorage.getItem(RELOAD_FLAG_KEY)) {
-          sessionStorage.setItem(RELOAD_FLAG_KEY, '1');
-          logDebugEvent('login_sync', 'einmaliger Reload nach Cloud-Übernahme', true);
-          location.reload();
-          return new Promise(function () {}); // Seite lädt eh neu, hier anhalten
-        }
-      });
+      return pullAllFromCloud();
     });
   }
 

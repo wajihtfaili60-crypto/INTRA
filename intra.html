@@ -12,7 +12,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="firebase-sync.js?v=3"></script>
+<script src="firebase-sync.js?v=4"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
@@ -3848,7 +3848,19 @@
     showPage((window.location.hash || '#projekte').slice(1));
   });
 
-  showPage((window.location.hash || '#projekte').slice(1));
+  // Das allererste Rendern wird bewusst auf window.intraUserReady verzögert
+  // (von firebase-sync.js bereitgestellt, siehe dortiger Kommentar bei
+  // initialSync()) - vorher steht in localStorage evtl. noch der Stand VOR
+  // dem Cloud-Abgleich, und ohne dieses Warten würde genau dieser veraltete
+  // Stand angezeigt (Grund für den Bug "Handy speichert, PC zeigt es nicht").
+  function initialShowPage() {
+    showPage((window.location.hash || '#projekte').slice(1));
+  }
+  if (window.intraUserReady && typeof window.intraUserReady.then === 'function') {
+    window.intraUserReady.then(initialShowPage, initialShowPage);
+  } else {
+    initialShowPage();
+  }
 })();
 </script>
 </body>
