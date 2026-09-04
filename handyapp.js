@@ -1466,23 +1466,26 @@
       });
     }
     btn.addEventListener('click', () => input.click());
-    input.addEventListener('change', () => {
+    input.addEventListener('change', async () => {
       const file = input.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        let arr = currentArr();
-        if (b.mehrfach) {
-          const max = b.maxAnzahl ? parseInt(b.maxAnzahl, 10) : null;
-          if (max && arr.length >= max) arr = arr.slice(0, Math.max(0, max - 1));
-          arr.push(reader.result);
-          protokollFormState.answers[b.id] = arr;
-        } else {
-          protokollFormState.answers[b.id] = reader.result;
-        }
-        renderPreview();
-      };
-      reader.readAsDataURL(file);
+      // Vor dem Speichern verkleinern (siehe resizeImageFileToDataUrl in
+      // app.js) - ein unverkleinertes Kamerafoto kann den localStorage-
+      // Speicherplatz sprengen, was bisher lautlos zu einem nie gespeicherten
+      // Foto führte (Vorschau sah richtig aus, das eigentliche Speichern
+      // schlug fehl, ganz ohne Meldung).
+      const dataUrl = await resizeImageFileToDataUrl(file);
+      if (!dataUrl) { showAppAlert('Foto konnte nicht gelesen werden.'); return; }
+      let arr = currentArr();
+      if (b.mehrfach) {
+        const max = b.maxAnzahl ? parseInt(b.maxAnzahl, 10) : null;
+        if (max && arr.length >= max) arr = arr.slice(0, Math.max(0, max - 1));
+        arr.push(dataUrl);
+        protokollFormState.answers[b.id] = arr;
+      } else {
+        protokollFormState.answers[b.id] = dataUrl;
+      }
+      renderPreview();
       input.value = '';
     });
     renderPreview();
@@ -1733,7 +1736,7 @@
       // zugeordneten Protokollen, welches der beiden das ausgefüllte ist).
       forMast[protokollFormState.task.id] = { protokollId: protokollFormState.protokoll.id, answers };
       all[mastKey] = forMast;
-      saveMastProtokollDaten(all);
+      const gespeichert = saveMastProtokollDaten(all);
       // Nur als erledigt markieren, wenn wirklich Daten eingegeben wurden -
       // ein leer gespeichertes Protokoll lässt die Tätigkeit "Nicht erledigt".
       const wirdErledigt = hasManualAnswerData(protokollFormState.protokoll, answers);
@@ -1747,8 +1750,17 @@
           .map((b) => `${b.label || b.type}=${isBausteinAnswered(b, answers[b.id]) ? 'ja' : 'nein'}`)
           .join(', ');
         window.intraLogEvent('protokoll_speichern',
-          `Mast ${state.currentMast.displayKey} · Aufgabe "${protokollFormState.task.titel}" · Protokoll "${protokollFormState.protokoll.name}" · wird ${wirdErledigt ? 'ERLEDIGT' : 'NICHT erledigt'} · Felder: ${bausteinSummary}`,
-          true);
+          `Mast ${state.currentMast.displayKey} · Aufgabe "${protokollFormState.task.titel}" · Protokoll "${protokollFormState.protokoll.name}" · wird ${wirdErledigt ? 'ERLEDIGT' : 'NICHT erledigt'} · Speichern ${gespeichert ? 'OK' : 'FEHLGESCHLAGEN'} · Felder: ${bausteinSummary}`,
+          gespeichert);
+      }
+      // Nutzer-gemeldeter Bug: ein fehlgeschlagenes Speichern (z.B. voller
+      // Speicherplatz) blieb bisher unbemerkt - Formular schloss sich, als
+      // wäre alles gut gegangen, tatsächlich änderte sich nichts. Jetzt statt
+      // dessen sofort und deutlich warnen, Formular NICHT schließen, damit
+      // nichts verloren geht.
+      if (!gespeichert) {
+        showAppAlert('Speichern fehlgeschlagen - vermutlich ist der Speicherplatz auf diesem Gerät voll. Bitte im Diagnose-Protokoll (Projekte-Auswahl, Lupe-Symbol) nachsehen und ggf. ältere Fotos/Daten löschen.');
+        return;
       }
       if (wirdErledigt) {
         markTaskDoneIfRequired(protokollFormState.list, protokollFormState.task, protokollFormState.protokoll.id);
@@ -1779,20 +1791,26 @@
     const addBtn = el.querySelector('#ha-add-photo-btn');
     const fileInput = el.querySelector('[data-mast-photo-input]');
     addBtn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', () => {
+    fileInput.addEventListener('change', async () => {
       const file = fileInput.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const all = loadMastFotos();
-        const list = all[mastKey] || [];
-        list.push({ id: makeMastDataId('foto'), dataUrl: reader.result, name: file.name, addedAt: new Date().toISOString() });
-        all[mastKey] = list;
-        saveMastFotos(all);
-        renderMastTabFotos();
-      };
-      reader.readAsDataURL(file);
+      // Vor dem Speichern verkleinern - siehe resizeImageFileToDataUrl in
+      // app.js (derselbe Grund wie beim Foto-Baustein im Protokoll-Formular).
+      const dataUrl = await resizeImageFileToDataUrl(file);
       fileInput.value = '';
+      if (!dataUrl) { showAppAlert('Foto konnte nicht gelesen werden.'); return; }
+      const all = loadMastFotos();
+      const list = all[mastKey] || [];
+      list.push({ id: makeMastDataId('foto'), dataUrl, name: file.name, addedAt: new Date().toISOString() });
+      all[mastKey] = list;
+      if (typeof window.intraLogEvent === 'function') {
+        window.intraLogEvent('mast_foto', `Mast ${state.currentMast.displayKey} · Datei ${file.name}`, true);
+      }
+      if (!saveMastFotos(all)) {
+        showAppAlert('Speichern fehlgeschlagen - vermutlich ist der Speicherplatz auf diesem Gerät voll. Bitte im Diagnose-Protokoll (Projekte-Auswahl, Lupe-Symbol) nachsehen.');
+        return;
+      }
+      renderMastTabFotos();
     });
     el.querySelectorAll('[data-photo-id]').forEach((thumb) => {
       thumb.addEventListener('click', () => openLightbox(thumb.getAttribute('data-photo-id')));

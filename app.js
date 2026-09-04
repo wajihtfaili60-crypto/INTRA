@@ -3480,8 +3480,28 @@ function saveMastTlManuell(map) {
 function loadMastTaskStatus() {
   try { return JSON.parse(localStorage.getItem(pKey(MAST_TASK_STATUS_KEY)) || '{}'); } catch (e) { return {}; }
 }
+// Alle save*()-Funktionen unten geben ab jetzt true/false zurück (statt
+// Fehler stumm zu verschlucken) - Nutzer-gemeldeter Bug: ein Speichern-
+// Versuch, der z.B. wegen vollem Speicherplatz (QuotaExceededError)
+// scheiterte, sah für die App bisher wie ein normaler Erfolg aus (Formular
+// schloss sich, "Erledigt" wurde versprochen), tatsächlich blieb der alte
+// Stand unverändert liegen - ganz ohne Fehlermeldung. Aufrufer (v.a. in
+// handyapp.js) können den Rückgabewert jetzt prüfen und den Nutzer aktiv
+// warnen statt eines stillen Datenverlusts.
+function trySetLocalStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (e) {
+    console.warn('Intra: Speichern fehlgeschlagen für', key, e);
+    if (typeof window.intraLogEvent === 'function') {
+      window.intraLogEvent('local_save_fail', key + ': ' + (e && e.message ? e.message : e), false);
+    }
+    return false;
+  }
+}
 function saveMastTaskStatus(map) {
-  try { localStorage.setItem(pKey(MAST_TASK_STATUS_KEY), JSON.stringify(map)); } catch (e) { /* ignore */ }
+  return trySetLocalStorage(pKey(MAST_TASK_STATUS_KEY), JSON.stringify(map));
 }
 // { [mastKey]: { [taskId]: { protokollId, answers: { [bausteinId]: value } } } }
 // Bewusst nach taskId (nicht protokollId) geschlüsselt: mehrere Tätigkeiten
@@ -3497,17 +3517,88 @@ function loadMastProtokollDaten() {
   try { return JSON.parse(localStorage.getItem(pKey(MAST_PROTOKOLL_DATEN_KEY)) || '{}'); } catch (e) { return {}; }
 }
 function saveMastProtokollDaten(map) {
-  try { localStorage.setItem(pKey(MAST_PROTOKOLL_DATEN_KEY), JSON.stringify(map)); } catch (e) { /* ignore */ }
+  return trySetLocalStorage(pKey(MAST_PROTOKOLL_DATEN_KEY), JSON.stringify(map));
 }
 // { [mastKey]: [{ id, dataUrl, name, addedAt }] }
 function loadMastFotos() {
   try { return JSON.parse(localStorage.getItem(pKey(MAST_FOTOS_KEY)) || '{}'); } catch (e) { return {}; }
 }
 function saveMastFotos(map) {
-  try { localStorage.setItem(pKey(MAST_FOTOS_KEY), JSON.stringify(map)); } catch (e) { /* ignore */ }
+  return trySetLocalStorage(pKey(MAST_FOTOS_KEY), JSON.stringify(map));
 }
 function makeMastDataId(prefix) {
   return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// ======================================================================
+// Foto-Verkleinerung vor dem Speichern (Handy-App: Mast-Fotos + Foto-
+// Bausteine in Protokollen). Nutzer-gemeldeter Bug: Foto aufgenommen +
+// gespeichert, sah in der Vorschau korrekt aus, aber weder der "Erledigt"-
+// Status noch die Cloud-Synchronisierung kamen jemals an - ganz ohne
+// Fehlermeldung. Ursache: ein Foto direkt von der Handy-Kamera landet
+// unkomprimiert als Base64-Text (oft mehrere MB) in genau EINEM, immer
+// weiter wachsenden localStorage-Schlüssel (alle Protokoll-Antworten bzw.
+// alle Fotos des ganzen Projekts). saveMastFotos()/saveMastProtokollDaten()
+// fangen JEDEN Fehler beim Speichern still ab (siehe dort) - ist der vom
+// Browser erlaubte Speicherplatz voll (auf iOS Safari oft nur ~5 MB), wirft
+// localStorage.setItem() einen QuotaExceededError, der bisher lautlos
+// verschluckt wurde: die App verhielt sich, als hätte das Speichern
+// geklappt, tatsächlich blieb der alte (unveränderte) Stand liegen.
+// resizeImageFileToDataUrl() verkleinert ein Kamerafoto client-seitig per
+// <canvas> auf eine dokumentationstaugliche, aber deutlich kleinere Größe
+// (Standard: max. 1440px lange Kante, JPEG ~72%) BEVOR es überhaupt in
+// localStorage landet - reduziert ein typisches mehrere-MB-Kamerafoto auf
+// üblicherweise unter 300 KB und senkt damit sowohl das Risiko, den
+// Speicherplatz zu sprengen, als auch die Firebase-Storage-Upload-Zeit
+// spürbar. Fällt bei jedem Fehler (z.B. sehr alter Browser ohne <canvas>)
+// auf die unveränderte Originaldatei zurück, statt das Foto zu verwerfen.
+// ======================================================================
+function resizeImageFileToDataUrl(file, maxDim, quality) {
+  maxDim = maxDim || 1440;
+  quality = quality || 0.72;
+  return new Promise(function (resolve) {
+    if (!file || !/^image\//.test(file.type || '')) {
+      // Kein Bild (z.B. HEIC ohne type, oder ein anderer Dateityp aus
+      // "Fotos & Dokumente") - unverändert übernehmen, Canvas kann damit
+      // ohnehin nichts anfangen.
+      const fallbackReader = new FileReader();
+      fallbackReader.onload = function () { resolve(fallbackReader.result); };
+      fallbackReader.onerror = function () { resolve(null); };
+      fallbackReader.readAsDataURL(file);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function () {
+      const original = reader.result;
+      try {
+        const img = new Image();
+        img.onload = function () {
+          try {
+            let w = img.naturalWidth || img.width;
+            let h = img.naturalHeight || img.height;
+            if (!w || !h) { resolve(original); return; }
+            if (w > maxDim || h > maxDim) {
+              if (w >= h) { h = Math.round(h * (maxDim / w)); w = maxDim; }
+              else { w = Math.round(w * (maxDim / h)); h = maxDim; }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            const resized = canvas.toDataURL('image/jpeg', quality);
+            // Nur verwenden, wenn tatsächlich kleiner - bei bereits kleinen/
+            // stark komprimierten Bildern kann JPEG-Re-Encoding gelegentlich
+            // sogar größer ausfallen.
+            resolve(resized.length < original.length ? resized : original);
+          } catch (e) { resolve(original); }
+        };
+        img.onerror = function () { resolve(original); };
+        img.src = original;
+      } catch (e) { resolve(original); }
+    };
+    reader.onerror = function () { resolve(null); };
+    reader.readAsDataURL(file);
+  });
 }
 
 // ======================================================================
@@ -3890,7 +3981,7 @@ function loadMastTaskAbschluss() {
   try { return JSON.parse(localStorage.getItem(pKey(MAST_TASK_ABSCHLUSS_KEY)) || '{}'); } catch (e) { return {}; }
 }
 function saveMastTaskAbschluss(map) {
-  try { localStorage.setItem(pKey(MAST_TASK_ABSCHLUSS_KEY), JSON.stringify(map)); } catch (e) { /* ignore */ }
+  return trySetLocalStorage(pKey(MAST_TASK_ABSCHLUSS_KEY), JSON.stringify(map));
 }
 // Findet (oder legt an) den heutigen Bautagesbericht des aktuellen Projekts
 // und hängt dort ein neues Ereignis an - genutzt, damit jeder Tätigkeits-
