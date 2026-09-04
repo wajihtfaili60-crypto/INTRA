@@ -55,24 +55,44 @@
   // Diagnose-Protokoll: Nutzer-Wunsch "füge irgendwas ein wo du immer genau
   // sehen kannst was ich gemacht habe und wann und wie ... so dass du immer
   // selber auslesen kannst" - da Claude keinen Login/Firebase-Console-Zugriff
-  // hat, schreibt die App ab sofort jeden wichtigen Schritt (Aktion UND
-  // Sync-Versuch mit Erfolg/Fehlergrund) in einen eigenen, bewusst GLOBALEN
-  // (nicht pKey()-gescopten - diese Datei kennt pKey()/currentProjectId()
-  // nicht, sie lädt vor app.js) localStorage-Schlüssel. Wird wie jeder andere
-  // Schlüssel automatisch mitsynchronisiert, UND ist über den "Diagnose"-
-  // Knopf in der Handy-App (Projekte-Auswahl) bzw. auf der Desktop-Projekte-
-  // Seite direkt als Text zum Kopieren einsehbar - ein Klick, kein
-  // Screenshot-Hin-und-Her mehr nötig. Auf eine feste Maximalzahl begrenzt,
-  // damit der Schlüssel nicht unbegrenzt wächst.
-  var DEBUG_LOG_KEY = 'levelbuild_debug_log';
+  // hat, schreibt die App jeden wichtigen Schritt (Aktion UND Sync-Versuch
+  // mit Erfolg/Fehlergrund) mit.
+  //
+  // WICHTIG (Bugfix "Handy zeigt nur PC-Einträge im Diagnose-Protokoll"):
+  // ursprünglich schrieben ALLE Geräte in EINEN gemeinsamen Schlüssel
+  // (levelbuild_debug_log) - jedes Gerät las die komplette Liste, hängte
+  // seinen eigenen Eintrag an und schrieb die GANZE Liste zurück. Das ist
+  // ein klassisches "Lost Update"-Problem: schreibt Gerät A kurz nachdem
+  // Gerät B etwas hochgeladen hat, aber BEVOR A's lokale Kopie den über den
+  // Firestore-Listener nachgelieferten Eintrag von B schon übernommen hat,
+  // überschreibt A's nächster Schreibvorgang B's Einträge komplett. Bei
+  // vielen schnellen Schreibvorgängen auf einem Gerät (z.B. PC bleibt offen
+  // und speichert wiederholt) verliert das andere Gerät praktisch immer.
+  // Fix: jedes Gerät bekommt eine eigene, stabile Geräte-ID und schreibt NUR
+  // noch in seinen EIGENEN Schlüssel (levelbuild_debug_log__<id>) - dadurch
+  // kann sich kein Gerät mehr gegenseitig überschreiben. Zur Anzeige werden
+  // alle vorhandenen Geräte-Protokolle zusammengeführt, siehe
+  // window.intraGetDebugLog() weiter unten.
+  var DEBUG_LOG_PREFIX = 'levelbuild_debug_log__';
   var DEBUG_LOG_MAX = 400;
   function deviceLabel() {
     return /handyapp\.html/i.test(location.pathname) ? 'Handy' : 'PC';
   }
+  var DEVICE_ID = (function () {
+    var idKey = '__intra_device_id';
+    var id;
+    try { id = localStorage.getItem(idKey); } catch (e) { id = null; }
+    if (!id) {
+      id = deviceLabel() + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+      try { localStorage.setItem(idKey, id); } catch (e) { /* ignore */ }
+    }
+    return id;
+  })();
+  var DEVICE_DEBUG_LOG_KEY = DEBUG_LOG_PREFIX + DEVICE_ID;
   function logDebugEvent(action, detail, ok) {
     try {
       var list;
-      try { list = JSON.parse(localStorage.getItem(DEBUG_LOG_KEY) || '[]'); } catch (e) { list = []; }
+      try { list = JSON.parse(localStorage.getItem(DEVICE_DEBUG_LOG_KEY) || '[]'); } catch (e) { list = []; }
       if (!Array.isArray(list)) list = [];
       list.push({
         ts: new Date().toISOString(),
@@ -83,10 +103,31 @@
         ok: (ok === undefined || ok === null) ? null : !!ok,
       });
       if (list.length > DEBUG_LOG_MAX) list = list.slice(list.length - DEBUG_LOG_MAX);
-      localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(list));
+      localStorage.setItem(DEVICE_DEBUG_LOG_KEY, JSON.stringify(list));
     } catch (e) { /* Diagnose-Protokoll darf die App nie zum Absturz bringen */ }
   }
   window.intraLogEvent = logDebugEvent;
+  // Führt die Protokolle ALLER bekannten Geräte (jeweils eigener
+  // levelbuild_debug_log__*-Schlüssel) zu einer einzigen, zeitlich
+  // sortierten Liste zusammen - für die Diagnose-Ansicht in app.js/
+  // handyapp.js, damit dort trotz getrennter Schlüssel weiterhin EIN
+  // Protokoll mit den Einträgen aller Geräte zu sehen ist.
+  window.intraGetDebugLog = function () {
+    var merged = [];
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(DEBUG_LOG_PREFIX) === 0) {
+          try {
+            var part = JSON.parse(localStorage.getItem(k) || '[]');
+            if (Array.isArray(part)) merged = merged.concat(part);
+          } catch (e) { /* einzelnes defektes Geräte-Protokoll ignorieren */ }
+        }
+      }
+      merged.sort(function (a, b) { return String(a.ts).localeCompare(String(b.ts)); });
+    } catch (e) { /* ignore */ }
+    return merged;
+  };
 
   // -----------------------------------------------------------------------
   // Overlay: Login-Formular + Ladeanzeige
@@ -248,13 +289,13 @@
   function runUpload(key, value, reason) {
     return uploadKey(key, value).then(function () {
       unmarkPendingInQueue(key);
-      if (key !== DEBUG_LOG_KEY) logDebugEvent('sync_upload', key + ' (' + reason + ')', true);
+      if (key !== DEVICE_DEBUG_LOG_KEY) logDebugEvent('sync_upload', key + ' (' + reason + ')', true);
     }).catch(function (e) {
       // Bewusst NICHT aus der Warteschlange entfernt - ein fehlgeschlagener
       // Versuch bleibt vorgemerkt und wird beim nächsten App-Start erneut
       // versucht (retryPendingQueueOnStartup), statt verloren zu gehen.
       console.warn('Intra-Sync: Hochladen fehlgeschlagen für', key, e);
-      if (key !== DEBUG_LOG_KEY) logDebugEvent('sync_upload', key + ' (' + reason + '): ' + (e && e.message ? e.message : e), false);
+      if (key !== DEVICE_DEBUG_LOG_KEY) logDebugEvent('sync_upload', key + ' (' + reason + '): ' + (e && e.message ? e.message : e), false);
     });
   }
   function scheduleUpload(key, value) {
@@ -508,20 +549,22 @@
         if (change.doc.metadata.hasPendingWrites) return; // eigener, noch unbestätigter Schreibvorgang
         var data = change.doc.data();
         var lsKey = (data && data.key) || change.doc.id;
-        // WICHTIG: das Diagnose-Protokoll selbst (DEBUG_LOG_KEY) darf NIE
-        // einen Reload auslösen. Es wird - wie jeder andere Schlüssel -
-        // laufend mitsynchronisiert, ändert sich aber sehr häufig (bei
-        // praktisch jeder Aktion/jedem Sync-Versuch). Ohne diese Ausnahme
-        // entsteht eine Endlosschleife: jede neue Log-Zeile wird hochgeladen
-        // -> der eigene Echtzeit-Listener sieht die Änderung -> plant einen
-        // Reload -> der Reload selbst erzeugt neue Log-Zeilen (Erststart/
-        // Wiederholung-Einträge) -> die wiederum einen weiteren Reload
-        // auslösen, usw. Nutzer-gemeldeter Bug ("es wurde zurückgesetzt")
-        // war genau das: die Seite lud sich durch das Diagnose-Protokoll
-        // selbst laufend neu, mitten im eigentlichen Speichern/Hochladen.
-        // Der Wert wird trotzdem ganz normal lokal übernommen (damit das
-        // Protokoll auf allen Geräten sichtbar bleibt), nur eben ohne Reload.
-        if (lsKey === DEBUG_LOG_KEY) {
+        // WICHTIG: kein Diagnose-Protokoll-Schlüssel (levelbuild_debug_log__*
+        // - jedes Gerät hat seit dem Lost-Update-Fix seinen eigenen) darf
+        // jemals einen Reload auslösen. Sie werden - wie jeder andere
+        // Schlüssel - laufend mitsynchronisiert, ändern sich aber sehr
+        // häufig (bei praktisch jeder Aktion/jedem Sync-Versuch). Ohne diese
+        // Ausnahme entsteht eine Endlosschleife: jede neue Log-Zeile wird
+        // hochgeladen -> der eigene Echtzeit-Listener sieht die Änderung ->
+        // plant einen Reload -> der Reload selbst erzeugt neue Log-Zeilen
+        // (Erststart/Wiederholung-Einträge) -> die wiederum einen weiteren
+        // Reload auslösen, usw. Nutzer-gemeldeter Bug ("es wurde
+        // zurückgesetzt") war genau das: die Seite lud sich durch das
+        // Diagnose-Protokoll selbst laufend neu, mitten im eigentlichen
+        // Speichern/Hochladen. Der Wert wird trotzdem ganz normal lokal
+        // übernommen (damit das Protokoll auf allen Geräten sichtbar
+        // bleibt), nur eben ohne Reload.
+        if (lsKey.indexOf(DEBUG_LOG_PREFIX) === 0) {
           if (change.type === 'removed') { isHydrating = true; try { origRemoveItem(lsKey); } finally { isHydrating = false; } return; }
           var dlValue = data && data.value;
           if (typeof dlValue === 'string' && localStorage.getItem(lsKey) !== dlValue) {

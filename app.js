@@ -7942,8 +7942,18 @@ function btRemoveNode(nodes, id) {
     } catch (e) { return String(iso); }
   }
   function render() {
+    // window.intraGetDebugLog() (firebase-sync.js) führt die getrennten
+    // Protokoll-Schlüssel aller Geräte zusammen - seit dem Lost-Update-Fix
+    // schreibt jedes Gerät in seinen EIGENEN Schlüssel, siehe dortiger
+    // Kommentar. Fallback auf den alten, einzelnen Schlüssel nur für den
+    // unwahrscheinlichen Fall einer noch nicht aktualisierten firebase-
+    // sync.js-Version.
     let list;
-    try { list = JSON.parse(localStorage.getItem('levelbuild_debug_log') || '[]'); } catch (e) { list = []; }
+    if (typeof window.intraGetDebugLog === 'function') {
+      list = window.intraGetDebugLog();
+    } else {
+      try { list = JSON.parse(localStorage.getItem('levelbuild_debug_log') || '[]'); } catch (e) { list = []; }
+    }
     if (!Array.isArray(list)) list = [];
     const countEl = document.getElementById('diag-count');
     if (countEl) countEl.textContent = String(list.length);

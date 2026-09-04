@@ -1871,8 +1871,18 @@
   function renderDiagnoseLog() {
     const textEl = document.getElementById('ha-diagnose-text');
     if (!textEl) return;
+    // window.intraGetDebugLog() (firebase-sync.js) führt die getrennten
+    // Protokoll-Schlüssel aller Geräte zusammen - seit dem Lost-Update-Fix
+    // schreibt jedes Gerät in seinen EIGENEN Schlüssel, siehe dortiger
+    // Kommentar. Fallback auf den alten, einzelnen Schlüssel nur für den
+    // unwahrscheinlichen Fall einer noch nicht aktualisierten firebase-
+    // sync.js-Version.
     let list;
-    try { list = JSON.parse(localStorage.getItem('levelbuild_debug_log') || '[]'); } catch (e) { list = []; }
+    if (typeof window.intraGetDebugLog === 'function') {
+      list = window.intraGetDebugLog();
+    } else {
+      try { list = JSON.parse(localStorage.getItem('levelbuild_debug_log') || '[]'); } catch (e) { list = []; }
+    }
     if (!Array.isArray(list) || !list.length) {
       textEl.textContent = 'Noch keine Einträge. Führe eine Aktion aus (z.B. ein Protokoll speichern), dann hier erneut öffnen.';
       return;
