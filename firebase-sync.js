@@ -286,8 +286,15 @@
     return String(key).replace(/\//g, '_').slice(0, 1500);
   }
 
+  // Verfolgt alle GERADE laufenden Uploads (egal welcher Schlüssel) - Basis
+  // für window.intraWaitForPendingUploads() weiter unten: die Handy-App
+  // kann damit vor dem Schließen eines Formulars aktiv abwarten, bis der
+  // Upload wirklich bestätigt ist, statt sich auf einen unsichtbaren
+  // Hintergrundvorgang zu verlassen (Nutzer-Idee: "füge vielleicht
+  // Ladebildschirm hinzu welcher erst schließen wenn hochgeladen ist").
+  var inFlightUploads = [];
   function runUpload(key, value, reason) {
-    return uploadKey(key, value).then(function () {
+    var p = uploadKey(key, value).then(function () {
       unmarkPendingInQueue(key);
       if (key !== DEVICE_DEBUG_LOG_KEY) logDebugEvent('sync_upload', key + ' (' + reason + ')', true);
     }).catch(function (e) {
@@ -297,7 +304,31 @@
       console.warn('Intra-Sync: Hochladen fehlgeschlagen für', key, e);
       if (key !== DEVICE_DEBUG_LOG_KEY) logDebugEvent('sync_upload', key + ' (' + reason + '): ' + (e && e.message ? e.message : e), false);
     });
+    inFlightUploads.push(p);
+    p.then(function () {
+      var idx = inFlightUploads.indexOf(p);
+      if (idx !== -1) inFlightUploads.splice(idx, 1);
+    });
+    return p;
   }
+  // Wartet, bis alle GERADE anstehenden/laufenden Uploads abgeschlossen sind
+  // (egal ob Erfolg oder Fehler - Fehler bleiben ohnehin in der dauerhaften
+  // Warteschlange und werden automatisch nachgeholt). Löst zuerst noch
+  // wartende 700ms-Debounce-Timer sofort aus (wie flushPendingUploads),
+  // damit nichts unnötig lange in der Warteschleife hängt. timeoutMs
+  // begrenzt die maximale Wartezeit (Standard 20s) - läuft die Zeit ab,
+  // wird trotzdem aufgelöst (mit false), damit die UI nicht für immer
+  // hängen bleibt; der Upload läuft im Hintergrund weiter bzw. wird beim
+  // nächsten App-Start automatisch nachgeholt.
+  window.intraWaitForPendingUploads = function (timeoutMs) {
+    flushPendingUploads();
+    var settle = Promise.all(inFlightUploads.slice()).then(function () { return true; });
+    var ms = timeoutMs || 20000;
+    return Promise.race([
+      settle,
+      new Promise(function (resolve) { setTimeout(function () { resolve(false); }, ms); }),
+    ]);
+  };
   function scheduleUpload(key, value) {
     if (key !== PENDING_QUEUE_KEY) markPendingInQueue(key);
     if (pendingUploads[key]) clearTimeout(pendingUploads[key].timer);

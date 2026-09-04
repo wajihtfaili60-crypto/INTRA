@@ -2,3 +2,6 @@
 Thumbs.db
 *.log
 node_modules/
+
+# Lokale Diagnose-Werkzeuge (Test-Account-Zugangsdaten) - niemals commiten
+.diag-tools/

@@ -651,6 +651,60 @@
   flex: 1;
 }
 
+/* ---- Sync-Warteanzeige (Nutzer-Idee: "Ladebildschirm hinzufügen welcher
+   erst schließen wenn hochgeladen ist") - blendet sich nach dem Speichern
+   ein und bleibt sichtbar, bis window.intraWaitForPendingUploads()
+   (firebase-sync.js) bestätigt, dass der Upload wirklich abgeschlossen ist -
+   verhindert, dass die App zu früh geschlossen/gewechselt wird, bevor der
+   Cloud-Abgleich tatsächlich passiert ist. ---- */
+.ha-sync-wait{
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20,22,28,.45);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  z-index: 60;
+  padding: 24px;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity .18s ease;
+}
+.ha-sync-wait[hidden]{
+  display: flex;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.ha-sync-wait-box{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 22px 26px;
+  box-shadow: 0 20px 40px rgba(20,22,28,.28);
+  max-width: 260px;
+  text-align: center;
+}
+.ha-sync-spinner{
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid var(--gray-200);
+  border-top-color: var(--blue);
+  animation: ha-sync-spin .8s linear infinite;
+}
+@keyframes ha-sync-spin{ to{ transform: rotate(360deg); } }
+.ha-sync-wait-text{
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
 /* ---- Protokoll-Formular (Bausteine als echte Eingabefelder) ---- */
 .ha-field{ margin-bottom: 14px; }
 .ha-field-heading{

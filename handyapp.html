@@ -16,7 +16,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="style.css?v=3">
-<link rel="stylesheet" href="handyapp.css?v=5">
+<link rel="stylesheet" href="handyapp.css?v=6">
 <!-- Fix für den klassischen Mobile-Safari-Bug: "100vh"/"100dvh" berücksichtigt
      die Adressleiste nicht zuverlässig auf allen iOS-Versionen, wodurch Inhalt
      abgeschnitten wirkt und darunter leerer Platz entsteht. Wir setzen daher
@@ -40,7 +40,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="firebase-sync.js?v=5"></script>
+<script src="firebase-sync.js?v=6"></script>
 </head>
 <body class="ha-body">
 
@@ -305,6 +305,21 @@
         </div>
       </div>
 
+      <!-- ============================================================
+           Sync-Warteanzeige - Nutzer-Idee: "füge vielleicht Ladebildschirm
+           hinzu welcher erst schließen wenn hochgeladen ist". Blendet sich
+           nach dem Speichern (Protokoll/Aufgabe/Foto) ein und bleibt
+           sichtbar, bis firebase-sync.js (window.intraWaitForPendingUploads)
+           bestätigt, dass der Upload wirklich abgeschlossen ist - siehe
+           showSyncWait()/hideSyncWait() in handyapp.js.
+           ============================================================ -->
+      <div class="ha-sync-wait" id="ha-sync-wait" hidden>
+        <div class="ha-sync-wait-box">
+          <div class="ha-sync-spinner"></div>
+          <div class="ha-sync-wait-text" id="ha-sync-wait-text">Wird synchronisiert…</div>
+        </div>
+      </div>
+
     </div>
     <div class="ha-home-indicator"></div>
   </div>
@@ -312,6 +327,6 @@
 </div>
 
 <script src="app.js?v=6"></script>
-<script src="handyapp.js?v=7"></script>
+<script src="handyapp.js?v=8"></script>
 </body>
 </html>

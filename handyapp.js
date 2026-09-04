@@ -218,6 +218,43 @@
     okBtn.addEventListener('click', onOk);
   }
 
+  // Sync-Warteanzeige - Nutzer-Idee: "füge vielleicht Ladebildschirm hinzu
+  // welcher erst schließen wenn hochgeladen ist". Verdacht war: der Nutzer
+  // verlässt/schließt die Handy-App unmittelbar nach dem Speichern, noch
+  // bevor der (im Hintergrund um 700ms verzögerte) Cloud-Upload überhaupt
+  // gestartet ist - ohne jede sichtbare Rückmeldung sah "gespeichert" für
+  // ihn identisch aus, ob der Upload lief oder nicht. showSyncWait() blendet
+  // jetzt sichtbar ein und blockiert das Formular, bis
+  // window.intraWaitForPendingUploads() (firebase-sync.js) den Upload
+  // wirklich bestätigt (oder nach 20s abbricht - der Upload läuft dann im
+  // Hintergrund weiter bzw. wird durch die dauerhafte Warteschlange beim
+  // nächsten App-Start automatisch nachgeholt).
+  function showSyncWait(text) {
+    const el = document.getElementById('ha-sync-wait');
+    const textEl = document.getElementById('ha-sync-wait-text');
+    if (textEl) textEl.textContent = text || 'Wird synchronisiert…';
+    if (el) el.hidden = false;
+  }
+  function hideSyncWait() {
+    const el = document.getElementById('ha-sync-wait');
+    if (el) el.hidden = true;
+  }
+  // Zeigt die Warteanzeige, wartet auf den Cloud-Upload und blendet sie
+  // wieder aus - liefert true zurück, wenn der Upload innerhalb der
+  // Zeitgrenze wirklich bestätigt wurde, sonst false (lief in den
+  // Hintergrund weiter/wird später automatisch nachgeholt).
+  async function waitForSyncWithOverlay(label) {
+    if (typeof window.intraWaitForPendingUploads !== 'function') return true;
+    showSyncWait(label || 'Wird synchronisiert…');
+    let confirmed = false;
+    try {
+      confirmed = await window.intraWaitForPendingUploads(20000);
+    } finally {
+      hideSyncWait();
+    }
+    return confirmed;
+  }
+
   // Same flattening/label logic as the Mast-Detail page on the Hauptseite
   // (app.js), copied here since it lives inside a private IIFE there.
   function stripUnitSuffix(label) {
@@ -1699,7 +1736,7 @@
   if (protokollCloseBtn) protokollCloseBtn.addEventListener('click', closeProtokollForm);
   const protokollSaveBtn = document.getElementById('ha-protokoll-save');
   if (protokollSaveBtn) {
-    protokollSaveBtn.addEventListener('click', () => {
+    protokollSaveBtn.addEventListener('click', async () => {
       if (!protokollFormState) return;
       const answers = collectAnswers();
       // Pflichtfelder erzwingen: solange auch nur eines fehlt, wird gar
@@ -1767,6 +1804,16 @@
       } else {
         markTaskNotDone(protokollFormState.list, protokollFormState.task);
       }
+      // Erst hier, VOR dem Schließen des Formulars, auf den Cloud-Upload
+      // warten (sichtbar per Ladebildschirm) - siehe waitForSyncWithOverlay()
+      // weiter oben. Verhindert, dass der Nutzer das Formular/die App
+      // schließt, bevor der Upload wirklich abgeschickt wurde.
+      const synced = await waitForSyncWithOverlay('Protokoll wird synchronisiert…');
+      if (typeof window.intraLogEvent === 'function' && !synced) {
+        window.intraLogEvent('protokoll_speichern_sync_timeout',
+          `Mast ${state.currentMast.displayKey} · Aufgabe "${protokollFormState.task.titel}" · Upload nach 20s noch nicht bestätigt - läuft im Hintergrund weiter`,
+          null);
+      }
       closeProtokollForm();
       renderMastTabTaetigkeitsliste();
     });
@@ -1810,6 +1857,10 @@
         showAppAlert('Speichern fehlgeschlagen - vermutlich ist der Speicherplatz auf diesem Gerät voll. Bitte im Diagnose-Protokoll (Projekte-Auswahl, Lupe-Symbol) nachsehen.');
         return;
       }
+      // Fotos sind die größten Uploads (Storage-Datei + Firestore-Dokument) -
+      // hier ist das Risiko, dass die App vor Abschluss geschlossen wird, am
+      // größten. Siehe waitForSyncWithOverlay() weiter oben.
+      await waitForSyncWithOverlay('Foto wird hochgeladen…');
       renderMastTabFotos();
     });
     el.querySelectorAll('[data-photo-id]').forEach((thumb) => {
